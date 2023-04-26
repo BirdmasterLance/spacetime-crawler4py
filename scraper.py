@@ -1,5 +1,6 @@
 import re
 from urllib.parse import urlparse
+from bs4 import BeautifulSoup
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -15,6 +16,9 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
+
+    print(resp.raw_response)
+
     return list()
 
 def is_valid(url):
@@ -26,14 +30,15 @@ def is_valid(url):
         if parsed.scheme not in set(["http", "https"]):
             return False
 
-        # If the link is one of the domains we are allowed to check, 
-        # continue to the next regular expression check
-        # The actual expression is r".*((\.ics\.uci\.edu\/)|(\.cs\.uci\.edu\/)|(\.informatics\.uci\.edu\/)|(\.stat\.uci\.edu\/)).*"
+        # Compared the parsed result with a regular expression
+        # We use parsed.netloc as that is the main domain of the URL
+        # So if that matches our allowed URLs, it is good
+        # The actual expression is r".*((\.ics\.uci\.edu)|(\.cs\.uci\.edu)|(\.informatics\.uci\.edu)|(\.stat\.uci\.edu)).*"
         if(re.match(
-        r".*((\.ics\.uci\.edu\/)"
-        + r"|(\.cs\.uci\.edu\/)"
-        + r"|(\.informatics\.uci\.edu\/)"
-        + r"|(\.stat\.uci\.edu\/)).*")):
+            r".*((\.ics\.uci\.edu)"
+            + r"|(\.cs\.uci\.edu)"
+            + r"|(\.informatics\.uci\.edu)"
+            + r"|(\.stat\.uci\.edu)).*", parsed.netloc.lower())):
 
             # Part of the given code
             return not re.match(
