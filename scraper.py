@@ -1,9 +1,39 @@
 import re
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
+from sortedcontainers import SortedList, SortedSet, SortedDict
+
+
+# The number of subdomains for ics.uci.edu
+icsSubDomains = SortedDict()
+
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
+
+    # resp.raw_response can return None
+    # That means there is nothing we can scrap from this page
+    # So just return the links
+    if(resp.raw_response is None): return [link for link in links if is_valid(link)]
+
+    # Use BeautifulSoup to get the HTML of our current link
+    content = resp.raw_response.content
+    soup = BeautifulSoup(content, 'html.parser')
+
+    # Calculate ics.uci.edu subdomains
+
+    # For now, let's just put all the outputs in a file to look at
+    icsSubDomainsFile = open('icsSubDomains.txt', 'a')
+    if(re.match(r".*(\.ics\.uci\.edu).*", url)): # See if the URL regex matches for ics.uci.edu
+        if(url not in icsSubDomains): # Add the number of links it has if not in the dict
+            icsSubDomains[url] = len(soup.find_all('a'))
+        else: # Update the value if in dict
+            icsSubDomains[url] = icsSubDomains[url] + len(soup.find_all('a'))
+        text = url + ',' + str(icsSubDomains[url]) + '\n'
+        icsSubDomainsFile.write(text)
+
+    icsSubDomainsFile.close()
+
     return [link for link in links if is_valid(link)]
 
 def extract_next_links(url, resp):
@@ -17,7 +47,21 @@ def extract_next_links(url, resp):
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
 
-    print(resp.raw_response)
+    output = list()
+
+    # resp.raw_response can return None
+    # Meaning the URL has nothing in it we can use
+    # So return an empty list
+    if(resp.raw_response is None): return output
+
+    # Use BeautifulSoup to get the HTML of a page
+    # Then use find_all to get all the links on the page
+    # And append it to the output list
+    soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
+    for link in soup.find_all('a'):
+        output.append(link.get('href'))
+
+    return output
 
     return list()
 
