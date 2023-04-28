@@ -1,5 +1,5 @@
 import re
-
+ 
 def tokenize(TextFilePath):
     try:        
         tokens = []
