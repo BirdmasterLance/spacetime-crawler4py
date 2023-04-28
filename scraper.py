@@ -22,7 +22,7 @@ def scraper(url, resp):
     soup = BeautifulSoup(content, 'html.parser')
     
     # Calculate the top 50 most common words
-    find_common_words()
+    find_common_words(url, content)
     
     # Calculate ics.uci.edu subdomains
 
