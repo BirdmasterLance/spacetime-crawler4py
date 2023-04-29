@@ -10,6 +10,9 @@ stopWords = list(stopwords.words('english'))
 commonWords = dict()
 # The number of subdomains for ics.uci.edu
 icsSubDomains = SortedDict()
+# HTML information from the URLs we are downloading
+# We are making this a global variable because we are not going to parse a URL twice
+soup = None
 
 
 def scraper(url, resp):
@@ -20,26 +23,18 @@ def scraper(url, resp):
     # So just return the links
     if(resp.raw_response is None): return [link for link in links if is_valid(link)]
 
-    # Use BeautifulSoup to get the HTML of our current link
-    content = resp.raw_response.content
-    soup = BeautifulSoup(content, 'html.parser')
+    # Extracts the text from a given URL
+    soupText = str(url) + '\n\n' + soup.get_text()
+    length = len(soupText)
+    # If a page is too long, we are not going to scrape it
+    # Most pages do not exceed this many characters
+    if(length > 100000):
+        return [link for link in links if is_valid(link)]
     
     # Calculate the top 50 most common words
-    find_common_words(url, content)
-    
-    # Calculate ics.uci.edu subdomains
-
-    # For now, let's just put all the outputs in a file to look at
-    icsSubDomainsFile = open('icsSubDomains.txt', 'a')
-    if(re.match(r".*(\.ics\.uci\.edu).*", url)): # See if the URL regex matches for ics.uci.edu
-        if(url not in icsSubDomains): # Add the number of links it has if not in the dict
-            icsSubDomains[url] = len(soup.find_all('a'))
-        else: # Update the value if in dict
-            icsSubDomains[url] = icsSubDomains[url] + len(soup.find_all('a'))
-        text = url + ',' + str(icsSubDomains[url]) + '\n'
-        icsSubDomainsFile.write(text)
-
-    icsSubDomainsFile.close()
+    find_common_words(url, soup)
+    # Calculate all ICS subdomains
+    find_ICS_subDomains(url, soup)
 
     return [link for link in links if is_valid(link)]
 
@@ -56,21 +51,23 @@ def extract_next_links(url, resp):
 
     output = list()
 
-    # resp.raw_response can return None
-    # Meaning the URL has nothing in it we can use
-    # So return an empty list
-    if(resp.raw_response is None): return output
+    match resp.status:
+        case 200:
+            pass
+        case _:
+            return output
 
-    # Use BeautifulSoup to get the HTML of a page
-    # Then use find_all to get all the links on the page
-    # And append it to the output list
-    soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
+    if(resp.raw_response is None): return output
+    content = resp.raw_response.content
+    if(content is None): return output
+
+    global soup
+    soup = BeautifulSoup(content, 'html.parser')
+
     for link in soup.find_all('a'):
         output.append(link.get('href'))
 
     return output
-
-    return list()
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
@@ -151,3 +148,40 @@ def find_common_words(url, content):
 
     f1.close()
     
+
+# Calculate ics.uci.edu subdomains
+def find_ICS_subDomains(url, soup):
+
+    # Check if the URL is actually a part of the ics.uci.edu domain
+    if(re.match(r".*(\.ics\.uci\.edu).*", url)): # See if the URL regex matches for ics.uci.edu
+        global icsSubDomains
+
+        # When stopping the crawler and restarting it,
+        # the list of icsSubDomains is reset,
+        # so let's load it from a file
+        if(len(icsSubDomains) == 0):
+            with open('icsSubDomains.txt', 'r') as icsSubDomainsFile:
+                lines = icsSubDomainsFile.readlines()
+                if(len(lines) != 0): # if the file is empty, just skip adding anything into the dict
+                    for line in lines:
+                        lineSplit = line.split(', ') # Separate into URL and number of unique links
+                        icsSubDomains[lineSplit[0]] = int(lineSplit[1])
+
+        if(url not in icsSubDomains): # Add the number of links it has if not in the dict
+            uniqueDomains = set() # Only get UNIQUE links (in case a site links to a page more than once)
+            for domain in soup.find_all('a'): # Get all links
+                uniqueDomains.add(domain) # Add them into the set
+            icsSubDomains[url] = len(uniqueDomains)
+        else: # Update the value if in dict
+            uniqueDomains = set()
+            for domain in soup.find_all('a'):
+                uniqueDomains.add(domain)
+            icsSubDomains[url] = icsSubDomains[url] + len(uniqueDomains)
+
+        # For the Assignment, we're going to keep rewriting to the file
+        # Since the order of URLs can change at any time
+        with open('icsSubDomains.txt', 'w') as icsSubDomainsFile:
+            fileText = ""
+            for link in sorted(icsSubDomains.keys()):
+                fileText += link + ', ' + str(icsSubDomains[link]) + '\n'
+            icsSubDomainsFile.write(fileText)
