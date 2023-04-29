@@ -1,7 +1,10 @@
 import re
 from urllib.parse import urlparse
+from nltk.corpus import stopwords
 from bs4 import BeautifulSoup
 from sortedcontainers import SortedList, SortedSet, SortedDict
+
+stopWords = list(stopwords.words('english'))
 
 # The 50 most common words in the entire set of pages
 commonWords = dict()
@@ -118,20 +121,20 @@ def find_common_words(url, content):
         elif w.isalpha() and w.isupper() and len(w) > 1:  # acronyms
             totalWords.append(w)
         else:  # words stuck together, separated by caps
-            totalWords = re.findall('[A-Z][^A-Z]*', w)
+            splitWords = re.findall('[A-Z][^A-Z]*', w)
 
-            for w1 in split_word:
+            for w1 in splitWords:
                 if w1.isnumeric():
-                    total_words.append(w1)
+                    totalWords.append(w1)
                 if len(w) > 1 and w.isalnum():
-                    total_words.append(w1)
+                    totalWords.append(w1)
 
-    for w2 in total_words:
-        if w2.lower() not in stop_words:
-            if w2 not in common_words:
-                common_words[w2] = 1
+    for w2 in totalWords:
+        if w2.lower() not in stopWords:
+            if w2 not in commonWords:
+                commonWords[w2] = 1
             else:
-                common_words[w2] += 1
+                commonWords[w2] += 1
 
     commonWords = sorted(commonWords.items(), key=lambda x: x[1], reverse=True)
     counter = 0
