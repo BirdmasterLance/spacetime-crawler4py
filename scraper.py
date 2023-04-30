@@ -125,7 +125,7 @@ def find_unique_pages(url):
         uniquePages.add(url)
     
     with open('uniquePages.txt', 'w') as file:
-        file.write("The number of unique pages that have been found, solely based on URL: {}\n".format(len(uniquePages))
+        file.write("The number of unique pages that have been found, solely based on URL: {}\n".format(len(uniquePages)))
         
         count = 1
         for URL in uniquePages:
