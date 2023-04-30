@@ -6,6 +6,8 @@ from sortedcontainers import SortedList, SortedSet, SortedDict
 
 stopWords = list(stopwords.words('english'))
 
+# Unique pages based on URLs only (not fragments)
+uniquePages = set()
 # The page that is longest, and its respective word count
 longestPage = dict()
 # The 50 most common words in the entire set of pages
@@ -33,7 +35,9 @@ def scraper(url, resp):
     if(length > 100000):
         return [link for link in links if is_valid(link)]
     
-    # Calculatre the longest page in terms of words
+    # Calculate the number of unique pages
+    find_unique_pages(url)
+    # Calculate the longest page in terms of words
     find_longest_page(url, soup)
     # Calculate the top 50 most common words
     find_common_words(url, soup)
@@ -112,6 +116,26 @@ def is_valid(url):
         print ("TypeError for ", parsed)
         raise
 
+        
+# Calculate the number of unique pages, adding to the set if the URL is not already accounted for
+def find_unique_pages(url):
+    global uniquePages
+    
+    if url not in uniquePages:
+        uniquePages.add(url)
+    
+    with open('uniquePages.txt', 'w') as file:
+        file.write("The number of unique pages that have been found, solely based on URL: {}\n".format(len(uniquePages))
+        
+        count = 1
+        for URL in uniquePages:
+            file.write("{}. {}\n".format(str(count), URL))
+            file.write("\n")
+            count += 1
+        
+        file.close()       
+        
+ 
 # Calculate the longest page in terms of words
 def find_longest_page(url, info):
     global longestPage
