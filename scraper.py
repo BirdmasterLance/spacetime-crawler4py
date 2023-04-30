@@ -6,6 +6,8 @@ from sortedcontainers import SortedList, SortedSet, SortedDict
 
 stopWords = list(stopwords.words('english'))
 
+# The page that is longest, and its respective word count
+longestPage = dict()
 # The 50 most common words in the entire set of pages
 commonWords = dict()
 # The number of subdomains for ics.uci.edu
@@ -31,6 +33,8 @@ def scraper(url, resp):
     if(length > 100000):
         return [link for link in links if is_valid(link)]
     
+    # Calculatre the longest page in terms of words
+    find_longest_page(url, soup)
     # Calculate the top 50 most common words
     find_common_words(url, soup)
     # Calculate all ICS subdomains
@@ -108,6 +112,30 @@ def is_valid(url):
         print ("TypeError for ", parsed)
         raise
 
+# Calculate the longest page in terms of words
+def find_longest_page(url, info):
+    global longestPage
+    
+    longest_length = 0    # variable for page's length
+    total_words = []    # empty list that will hold all the words found on the page
+    text = info.get_text(strip=True)    # returns the text as a single string
+    total_words = re.findall("[a-zA-Z0-9]+", text)    # adds all the alphanumeric words from the page to the list
+    longest_length = len(total_words) # the length of the page
+    for k, v in longestPage.items():
+        if int(v) < longest_length:    # if the current url's page length is longer than what is being stored
+            longestPage.clear()    # clear the dictionary since there can only be one entry
+            longestPage[url] = longest_length    # add the new url as a key, and the length as its value
+     
+    with open('longestPage.txt', 'w') as file:
+        file.write("The longest page and its length (in terms of word count): \n")
+        
+        for k, v in longestPage.items():
+            file.write("URL: {} -> Word Count: {}".format(k, str(v)))
+        
+        file.write("\n")
+        file.close()
+        
+        
 def find_common_words(url, content):
     totalWords = []
 
