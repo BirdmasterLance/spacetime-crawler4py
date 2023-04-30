@@ -40,7 +40,7 @@ def scraper(url, resp):
     # Calculate the longest page in terms of words
     find_longest_page(url, soup)
     # Calculate the top 50 most common words
-    find_common_words(url, soup)
+    find_common_words(soup)
     # Calculate all ICS subdomains
     find_ICS_subDomains(url, soup)
 
@@ -160,24 +160,21 @@ def find_longest_page(url, info):
         file.close()
         
         
-def find_common_words(url, content):
+def find_common_words(content):
     global commonWords
     totalWords = []
 
     for w in content.get_text(strip=True).split():
-
-        if w.isnumeric():  # numerics such as dates
-            totalWords.append(w)
-        elif w.isalpha() and w.isupper() and len(w) > 1:  # acronyms
+        if w.isnumeric() or (w.isalpha() and w.isupper() and len(w) > 1):  # numerics such as dates
             totalWords.append(w)
         else:  # words stuck together, separated by caps
             splitWords = re.findall('[A-Z][^A-Z]*', w)
 
-            for w1 in splitWords:
-                if w1.isnumeric():
-                    totalWords.append(w1)
-                if len(w) > 1 and w.isalnum():
-                    totalWords.append(w1)
+        for w1 in splitWords:
+            if w1.isnumeric():
+                totalWords.append(w1)
+            if len(w) > 1 and w.isalnum():
+                totalWords.append(w1)
 
     for w2 in totalWords:
         if w2.lower() not in stopWords:
