@@ -161,8 +161,8 @@ def find_longest_page(url, info):
         
         
 def find_common_words(url, content):
-    totalWords = []
     global commonWords
+    totalWords = []
 
     for w in content.get_text(strip=True).split():
 
