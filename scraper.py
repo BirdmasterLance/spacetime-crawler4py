@@ -113,7 +113,7 @@ def is_valid(url):
         return False
 
     except TypeError:
-        print ("TypeError for ", parsed)
+        print("TypeError for ", parsed)
         raise
 
         
@@ -139,14 +139,15 @@ def find_unique_pages(url):
 # Calculate the longest page in terms of words
 def find_longest_page(url, info):
     global longestPage
-    
+
+    url = urlparse.urldefrag(url)   # removes the fragment from the url
     longest_length = 0    # variable for page's length
     total_words = []    # empty list that will hold all the words found on the page
     text = info.get_text(strip=True)    # returns the text as a single string
     total_words = re.findall("[a-zA-Z0-9]+", text)    # adds all the alphanumeric words from the page to the list
-    longest_length = len(total_words) # the length of the page
+    longest_length = len(total_words)   # the length of the page
     for k, v in longestPage.items():
-        if int(v) < longest_length:    # if the current url's page length is longer than what is being stored
+        if int(v) < longest_length and url not in longestPage:    # if the current url's page length is longer than what is being stored
             longestPage.clear()    # clear the dictionary since there can only be one entry
             longestPage[url] = longest_length    # add the new url as a key, and the length as its value
      
@@ -165,9 +166,9 @@ def find_common_words(content):
     totalWords = []
 
     for w in content.get_text(strip=True).split():
-        if w.isnumeric() or (w.isalpha() and w.isupper() and len(w) > 1):  # numerics such as dates
+        if w.isnumeric() or (w.isalpha() and w.isupper() and len(w) > 1):
             totalWords.append(w)
-        else:  # words stuck together, separated by caps
+        else:
             splitWords = re.findall('[A-Z][^A-Z]*', w)
 
         for w1 in splitWords:
