@@ -23,18 +23,16 @@ soup = None
 def scraper(url, resp):
     links = extract_next_links(url, resp)
 
+    # If extract_next_links returns empty,
+    # then the page was not what we wanted
+    # so return nothing
+    if(len(links) == 0):
+        return list()
+
     # resp.raw_response can return None
     # That means there is nothing we can scrap from this page
     # So just return the links
     if(resp.raw_response is None): return [link for link in links if is_valid(link)]
-
-    # Extracts the text from a given URL
-    soupText = str(url) + '\n\n' + soup.get_text()
-    length = len(soupText)
-    # If a page is too long, we are not going to scrape it
-    # Most pages do not exceed this many characters
-    if(length > 100000):
-        return [link for link in links if is_valid(link)]
     
     # Calculate the number of unique pages
     find_unique_pages(url)
@@ -60,11 +58,15 @@ def extract_next_links(url, resp):
 
     output = list()
 
-    match resp.status:
-        case 200:
-            pass
-        case _:
-            return output
+    # Anything that isn't in the 2XX or 3XX is probably a real error
+    if(resp.status >= 400):
+        return output
+
+    # This page has no content, skip
+    if(resp.status == 204):
+        return output
+    elif(resp.status == 305): # we can't use proxies, so we are skipping this
+        return output
 
     if(resp.raw_response is None): return output
     content = resp.raw_response.content
@@ -72,6 +74,18 @@ def extract_next_links(url, resp):
 
     global soup
     soup = BeautifulSoup(content, 'html.parser')
+
+    length = len(soup.get_text())
+
+    # If a page is too short, it's probably not full of any useful information
+    # so let's skip it
+    if (length < 500):
+        return output
+
+    # If a page is too long, we are not going to scrape it
+    # Most pages do not exceed this many characters
+    if(length > 100000):
+        return output
 
     for link in soup.find_all('a'):
         output.append(link.get('href'))
