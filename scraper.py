@@ -2,6 +2,7 @@ import re
 from urllib.parse import urlparse
 from nltk.corpus import stopwords
 from bs4 import BeautifulSoup
+import itertools
 from sortedcontainers import SortedList, SortedSet, SortedDict
 
 stopWords = list(stopwords.words('english'))
@@ -163,8 +164,9 @@ def find_longest_page(url, info):
         
 def find_common_words(content):
     global commonWords
-    totalWords = []
+    totalWords = []     # list to keep track of all the words
 
+    #   this is essentially the tokenizer, move it into the tokenizer file
     for w in content.get_text(strip=True).split():
         if w.isnumeric() or (w.isalpha() and w.isupper() and len(w) > 1):
             totalWords.append(w)
@@ -177,6 +179,7 @@ def find_common_words(content):
             if len(w) > 1 and w.isalnum():
                 totalWords.append(w1)
 
+    #   check that tokens are not stopwords and add them into the dictionary
     for w2 in totalWords:
         if w2.lower() not in stopWords:
             if w2 in commonWords:
@@ -184,16 +187,14 @@ def find_common_words(content):
             else:
                 commonWords[w2] = 1
 
-    commonWords = sorted(commonWords.items(), key=lambda x: x[1], reverse=True)
-    counter = 0
+    #  sort tokens by their frequency and slice dictionary to top 50 common tokens
+    commonWords = dict(itertools.islice(sorted(commonWords.items(), key=lambda x: x[1], reverse=True), 50))
 
     with open("top50CommonWords.txt", "w") as f1:
-        f1.write("Top 50 Common Words (ignoring stopwords): \n\n")
+        f1.write("Writing top 50 common words... \n\n")
 
         for k, v in commonWords:
-            if counter < 50:
-                f1.write("'{}' : {}\n".format(k, str(v)))
-                counter += 1
+            f1.write("'{}' : {}\n".format(k, str(v)))
 
         f1.write("\nend")
 
