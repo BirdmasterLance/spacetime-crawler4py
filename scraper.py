@@ -179,10 +179,10 @@ def find_common_words(content):
 
     for w2 in totalWords:
         if w2.lower() not in stopWords:
-            if w2 not in commonWords:
-                commonWords[w2] = 1
-            else:
+            if w2 in commonWords:
                 commonWords[w2] += 1
+            else:
+                commonWords[w2] = 1
 
     commonWords = sorted(commonWords.items(), key=lambda x: x[1], reverse=True)
     counter = 0
