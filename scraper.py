@@ -174,9 +174,7 @@ def find_common_words(content):
             splitWords = re.findall('[A-Z][^A-Z]*', w)
 
         for w1 in splitWords:
-            if w1.isnumeric():
-                totalWords.append(w1)
-            if len(w) > 1 and w.isalnum():
+            if w1.isnumeric() or (len(w) > 1 and w.isalnum()):
                 totalWords.append(w1)
 
     #   check that tokens are not stopwords and add them into the dictionary
