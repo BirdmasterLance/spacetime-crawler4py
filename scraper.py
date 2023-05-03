@@ -111,6 +111,19 @@ def is_valid(url):
             + r"|(\.informatics\.uci\.edu)"
             + r"|(\.stat\.uci\.edu)).*", parsed.netloc.lower())):
 
+            # Regex expression from https://support.archive-it.org/hc/en-us/articles/208332963-Modify-your-crawl-scope-with-a-Regular-Expression
+            # Prevents the crawler from accessing sites that:
+            # 1. have incredibly long and complicated URLs
+            # 2. have repeating directories (no more than 2)
+            # 3. may be related to calendars
+            # This is to avoid common traps
+            if(re.match(
+                r"^.*?(/.+?/).*?\1.*$|^.*?/(.+?/)\2.*$"
+                + r"^.*(/misc|/sites|/all|/themes|/modules|/profiles|/css|/field|/node|/theme){3}.*$"
+                + r"^.*calendar.*$",
+                        parsed.netloc.lower())):
+                return False
+
             # Part of the given code
             return not re.match(
                 r".*\.(css|js|bmp|gif|jpe?g|ico"

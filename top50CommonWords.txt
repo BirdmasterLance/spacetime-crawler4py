@@ -1,0 +1,54 @@
+Writing top 50 common words... 
+
+'Research' : 31906
+'C' : 22677
+'Computer' : 18119
+'Information' : 16932
+'Current' : 15580
+'Student' : 14447
+'September' : 13279
+'News' : 13277
+'Software' : 13237
+'Graduate' : 12467
+'E' : 10782
+'Department' : 10063
+'Science' : 8493
+'Bren' : 7582
+'Course' : 7280
+'U' : 6902
+'Faculty' : 6447
+'School' : 6338
+'Master' : 5703
+'Data' : 4599
+'UCI' : 4378
+'Donald' : 4304
+'Professor' : 4245
+'Statistics' : 3548
+'New' : 3397
+'Opportunities' : 3382
+'Welcome' : 3378
+'Sciences' : 3173
+'ICS' : 2936
+'Center' : 2660
+'Program' : 2481
+'Resources' : 1800
+'Award' : 1509
+'Statistical' : 1447
+'Internships' : 1269
+'Study' : 1207
+'Directory' : 1086
+'Employment' : 770
+'Bayesian' : 752
+'Seminars' : 705
+'Grant' : 703
+'Professors' : 695
+'Listings' : 654
+'Archive©' : 606
+'Receive' : 535
+'Gillen' : 492
+'Methods' : 481
+'Job' : 414
+'Nan' : 392
+'PM' : 208
+
+end
