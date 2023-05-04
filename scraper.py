@@ -195,16 +195,19 @@ def find_common_words(content):
 
     #   this is essentially the tokenizer, move it into the tokenizer file
     for w in content.get_text(strip=True).split():
+        #   include numbers, exclude single letters such as 'E'
         if w.isnumeric() or (w.isalpha() and w.isupper() and len(w) > 1):
             totalWords.append(w)
         else:
+            #   separate words stuck together by non-alphabetic characters
             splitWords = re.findall('[A-Z][^A-Z]*', w)
 
         for w1 in splitWords:
-            if w1.isnumeric() or (len(w) > 1 and w.isalnum()):
+            if w1.isnumeric() or (len(w1) > 1 and w1.isalnum()):
                 totalWords.append(w1)
 
     #   check that tokens are not stopwords and add them into the dictionary
+    #   increment tokens that are already found
     for w2 in totalWords:
         if w2.lower() not in stopWords:
             if w2 in commonWords:
