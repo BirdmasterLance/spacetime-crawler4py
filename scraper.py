@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urldefrag
 from nltk.corpus import stopwords
 from bs4 import BeautifulSoup
 import itertools
@@ -148,10 +148,10 @@ def is_valid(url):
 # Calculate the number of unique pages, adding to the set if the URL is not already accounted for
 def find_unique_pages(url):
     global uniquePages
-    url = urlparse.urldefrag(url)
+    url = urldefrag(url)[0]
 
-    if url[0] not in uniquePages:
-        uniquePages.add(url[0])
+    if url not in uniquePages:
+        uniquePages.add(url)
     
     with open('uniquePages.txt', 'w') as file:
         file.write("The number of unique pages that have been found, solely based on URL: {}\n".format(len(uniquePages)))
@@ -169,7 +169,7 @@ def find_unique_pages(url):
 def find_longest_page(url, info):
     global longestPage
 
-    url = urlparse.urldefrag(url)   # removes the fragment from the url
+    url = urldefrag(url)[0]   # removes the fragment from the url
     longest_length = 0    # variable for page's length
     total_words = []    # empty list that will hold all the words found on the page
     text = info.get_text(strip=True)    # returns the text as a single string
@@ -203,9 +203,9 @@ def find_common_words(content):
             #   separate words stuck together by non-alphabetic characters
             splitWords = re.findall('[A-Z][^A-Z]*', w)
 
-        for w1 in splitWords:
-            if w1.isnumeric() or (len(w1) > 1 and w1.isalnum()):
-                totalWords.append(w1)
+            for w1 in splitWords:
+                if w1.isnumeric() or (len(w1) > 1 and w1.isalnum()):
+                    totalWords.append(w1)
 
     #   check that tokens are not stopwords and add them into the dictionary
     #   increment tokens that are already found
@@ -217,13 +217,17 @@ def find_common_words(content):
                 commonWords[w2] = 1
 
     #  sort tokens by their frequency and slice dictionary to top 50 common tokens
-    commonWords = dict(itertools.islice(sorted(commonWords.items(), key=lambda x: x[1], reverse=True), 50))
+    commonWordsSorted = sorted(commonWords.items(), key=lambda x: x[1], reverse=True)
+
+    counter = 0
 
     with open("top50CommonWords.txt", "w") as f1:
-        f1.write("Writing top 50 common words... \n\n")
+        f1.write("Top 50 Common Words: \n\n")
 
-        for k, v in commonWords:
-            f1.write("'{}' : {}\n".format(k, str(v)))
+        for k, v in commonWordsSorted:
+            if counter < 50:
+                f1.write("'{}' : {}\n".format(k, str(v)))
+                counter += 1
 
         f1.write("\nend")
 
@@ -236,7 +240,7 @@ def find_ICS_subDomains(url, soup):
     # Check if the URL is actually a part of the ics.uci.edu domain
     if(re.match(r".*(\.ics\.uci\.edu).*", url)): # See if the URL regex matches for ics.uci.edu
         global icsSubDomains
-        url, fragment = urlparse.urldefrag(url)
+        url = urldefrag(url)[0]
         # When stopping the crawler and restarting it,
         # the list of icsSubDomains is reset,
         # so let's load it from a file
