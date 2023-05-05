@@ -1,3 +1,62 @@
+1. The number of unique pages that have been found, solely based on URL: 7124
+
+2. The longest page and its length (in terms of word count): 
+URL: http://www.ics.uci.edu/~wjohnson/BIDA/Ch13/KidneyData.txt -> Word Count: 29071
+
+3. Writing top 50 common words... 
+
+'Research' : 31906
+'Events' : 27678
+'Computer' : 18119
+'Information' : 16932
+'Current' : 15580
+'Student' : 14447
+'September' : 13279
+'News' : 13277
+'Software' : 13237
+'Current' : 12895
+'January' : 12557
+'Student' : 12364
+'Past' : 11390
+'Code' : 11233
+'Software' : 10783
+'Courses' : 10455
+'Students' : 10316
+'Books' : 10256
+'News' : 9859
+'Engineering' : 9217
+'Undergraduate' : 9107
+'Graduate' : 9070
+'Informatics' : 8817
+'Us' : 8702
+'Blogs' : 8172
+'Department' : 8096
+'Bytes' : 7769
+'Projects' : 7627
+'Read' : 7603
+'September' : 7559
+'November' : 7379
+'Support' : 7343
+'June' : 7264
+'Community' : 7235
+'October' : 7181
+'Outreach' : 7076
+'Science' : 7073
+'August' : 7061
+'December' : 7035
+'July' : 7013
+'Previous' : 6790
+'Navigation' : 6717
+'Upcoming' : 6702
+'May' : 6636
+'Jain' : 6561
+'April' : 6537
+'March' : 6532
+'Theme' : 6393
+'February' : 6337
+'Day' : 6319
+
+4. ics sub domains:
 http://archive.ics.uci.edu/ml/datasets/CalIt2+Building+People+Counts, 16
 http://archive.ics.uci.edu/ml/datasets/Dodgers+Loop+Sensor, 16
 http://archive.ics.uci.edu/ml/datasets/Netflix+Prize, 13

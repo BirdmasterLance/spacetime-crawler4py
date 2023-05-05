@@ -148,9 +148,10 @@ def is_valid(url):
 # Calculate the number of unique pages, adding to the set if the URL is not already accounted for
 def find_unique_pages(url):
     global uniquePages
-    
-    if url not in uniquePages:
-        uniquePages.add(url)
+    url = urlparse.urldefrag(url)
+
+    if url[0] not in uniquePages:
+        uniquePages.add(url[0])
     
     with open('uniquePages.txt', 'w') as file:
         file.write("The number of unique pages that have been found, solely based on URL: {}\n".format(len(uniquePages)))
@@ -235,7 +236,7 @@ def find_ICS_subDomains(url, soup):
     # Check if the URL is actually a part of the ics.uci.edu domain
     if(re.match(r".*(\.ics\.uci\.edu).*", url)): # See if the URL regex matches for ics.uci.edu
         global icsSubDomains
-
+        url, fragment = urlparse.urldefrag(url)
         # When stopping the crawler and restarting it,
         # the list of icsSubDomains is reset,
         # so let's load it from a file
