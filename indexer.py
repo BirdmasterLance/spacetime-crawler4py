@@ -91,7 +91,8 @@ def checkHeaderForWord(soup, header, word):
         if(word in section.get_text()): return True
     return False
 
-
+# Function to build the index
+# Set docID to change the starting ID for the documents
 def indexDocuments(docId):
     numFiles = 0
     path = pathlib.Path(json_dir6)
@@ -125,10 +126,12 @@ def indexDocuments(docId):
                 if token not in index:
                     index[token] = list() # Initialize a new list of postings
                 
+                # Create posting that holds document information
                 posting = Posting()
                 posting.setId(docId)
                 posting.setPosition(tokenMatch.start())
                 index[token].append(posting)
+
                 # foundPosting = False
                 # if(len(index[token]) != 0):
                 #     for posting in index[token]:
@@ -158,8 +161,9 @@ def indexDocuments(docId):
     totalEndTime = time.time()
     print('Total execution time:', str(totalEndTime-totalStartTime))
 
+    # Put the word postings into a file
+    # Also build the index of the index
     index_index = dict()
-
     writeStartTime = time.time()
     for token in sorted(index.keys()):
         index_file = index_file6
@@ -190,30 +194,40 @@ def indexDocuments(docId):
 # Returns the posting information from a word based on its info in the index file
 def getWordPostingFromFile(startingWord):
     output = dict()
-    startingWord = startingWord.lower()
-    startingLetter = startingWord[0].upper()
+    startingWord = startingWord.lower() # Set the word to be all lower case
+    startingLetter = startingWord[0].upper() # Get the first letter of the starting word
     postingList = list()
-    for index_file in index_files:
+    for index_file in index_files: # For the all index files we have
         try:
+            # Open both the index file and the index of the index file
             with open(index_file + 'index' + startingLetter + '.txt', 'r', encoding='utf-8') as f, open(index_file + 'index' + startingLetter + 'Index.txt', 'r', encoding='utf-8') as f2:
-                if(f is None or f2 is None): continue
-                index_line = f2.readline()
+                if(f is None or f2 is None): continue # If the file doesn't exist, continue
+
+                index_line = f2.readline() # Read the line of the index of the index file
                 limit = 0
-                while index_line:
-                    indexPosition = int(index_line)
-                    if(indexPosition != 0):
+                while index_line: # While there is a line to read
+                    indexPosition = int(index_line) # Get the position of where the word starts in the index file
+                    if(indexPosition != 0): 
                         indexPosition += limit
+                    
+                    f.seek(indexPosition) # Get the position of the word in the index file
+                    postingLine = f.readline() # Read where the word line is
+                    postingInfo = postingLine.split(' ') # Split it so we have the word and its posting
+
+                    # Because special letters have a length greater than 1
+                    # We need to adjust the position so the seek is correct
                     limit += 1
-                    f.seek(indexPosition)
-                    postingLine = f.readline()
-                    postingInfo = postingLine.split(' ')
                     notABC = (char for char in postingInfo[0] if char not in 'abcdefghijklmnopqrstuvwxyz0123456789|,\n-_\'')
                     for char in notABC: limit += 1
+
+                    # Use this library to get the nearest similarity to the word
                     if(difflib.get_close_matches(startingWord, [postingInfo[0]], cutoff=0.85)):
-                        wordInfo = postingInfo[1].split('|')
+                        wordInfo = postingInfo[1].split('|') # The postings are split with '|' 
                         for word in wordInfo:
-                            idAndPosition = word.split(',')
-                            posting = Posting()
+                            idAndPosition = word.split(',') # The document ID and word position is split with ','
+                            
+                            # Create and populate the postings
+                            posting = Posting() 
                             posting.setId(int(idAndPosition[0]))
                             posting.setPosition(int(idAndPosition[1]))
                             postingList.append(posting)
@@ -226,15 +240,16 @@ def getWordPostingFromFile(startingWord):
     output[startingWord] = postingList
     return output
 
+# Calculate document frequencies from postings
 def getDocFrequencyFromPosting(postingDict):
     output = dict()
-    for word,postings in postingDict.items():
+    for word,postings in postingDict.items(): # For the word and its postings
         lastDocId = postings[0].getId()
         docFreq = 0
         docFreqList = list()
-        for posting in postings:
-            if lastDocId != posting.getId():
-                docFreqList.append((lastDocId, docFreq))
+        for posting in postings: # For every posting in the list of postings
+            if lastDocId != posting.getId(): # If the docID changed, then we need to add up how many times its appeared
+                docFreqList.append((lastDocId, docFreq)) 
                 docFreq = 0
             docFreq += 1
             lastDocId = posting.getId()
@@ -242,6 +257,8 @@ def getDocFrequencyFromPosting(postingDict):
         output[word] = docFreqList
     return output
     
+# Calculate intersecting points across two different lists
+# Based on the notes in class
 def intersect(list1, list2):
     output = list()
     list1 = enumerate(list1)
@@ -260,17 +277,17 @@ def intersect(list1, list2):
 # Returns how many URLs were printed
 def printURLs(collection, limiter):
     urls = set()
-    for freq in sorted(collection, key=lambda a: a[1], reverse=True):
+    for freq in sorted(collection, key=lambda a: a[1], reverse=True): # Sort list by value (by Doc Frequency)
         if(len(urls) == limiter): break
-        with open(doc_index_file, 'r') as f:
+        with open(doc_index_file, 'r') as f: 
             line = f.readline()
-            while line != '':
+            while line != '': # Look through all the documents in the document to ID file
                 lineParse = line.split(';')
                 if(freq[0] == int(lineParse[0])):
                     with open(lineParse[1].strip('\n'), 'r') as f2:
                         data = json.load(f2)
                         link = data['url']
-                        defraggedURL = urldefrag(link)[0]
+                        defraggedURL = urldefrag(link)[0] # Defrag the URL
                         urls.add(defraggedURL)
                 line = f.readline()
     for url in urls:
