@@ -1,6 +1,8 @@
 import json
 import re
 import pathlib
+from tkinter import scrolledtext
+
 from bs4 import BeautifulSoup
 from nltk.stem import PorterStemmer
 import difflib
@@ -59,10 +61,22 @@ class Posting:
         return (self.importantScore <= other.importantScore) or (self.wordFrequency <= other.wordFrequency)
 
 
+def retrieve_search_results():
+    # Placeholder function to simulate retrieving search results
+    # Replace this with your actual search logic
+    search_results = [
+        "Processing... \n"
+    ]
+    return search_results
+
+
+# noinspection PyArgumentList
 class SearchEngineGUI:
     def __init__(self):
         self.window = tk.Tk()
         self.window.title("Search Engine")
+        self.root = tk.Tk()
+        self.root.title("Results")
 
         # Create search query input
         self.query_label = tk.Label(self.window, text="Enter your query:")
@@ -74,20 +88,41 @@ class SearchEngineGUI:
         self.search_button = tk.Button(self.window, text="Search", command=self.process_search)
         self.search_button.pack()
 
-        # Create result label
-        self.result_label = tk.Label(self.window, text="")
-        self.result_label.pack()
+        # Create results window
+        self.results_window = scrolledtext.ScrolledText(self.root, width=160, height=30)
+        self.results_window.pack()
 
         # Query variable
         self.query = ""
 
+        # List of webpages
+        self.webpages = []
+
+        # Search engine instance
+        self.search_engine = SearchEngine()
+
     def process_search(self):
         # Get the query from the entry field
         self.query = self.query_entry.get()
-        # Implement your search logic here
 
-        # For demonstration purposes, let's just update the result label
-        self.result_label.config(text="Search for query: " + self.query)
+        search_results = self.search_engine.run_engine(self.query)
+
+        self.results_window.delete("1.0", tk.END)
+
+        # Display the search results in the results window
+        for result in search_results:
+            self.results_window.insert(tk.END, result + "\n")
+
+    def update_results_window(self):
+        # Clear the results window
+        self.results_window.delete("1.0", tk.END)
+
+        # Display the webpages in the results window
+        for webpage in self.webpages:
+            self.results_window.insert(tk.END, webpage + "\n")
+
+        # Disable editing in the results window
+        self.results_window.configure(state="disabled")
 
     def get_query(self):
         return self.query
@@ -101,14 +136,16 @@ ps = PorterStemmer()
 
 indexLimits = [0, 1307, 5367, 7946, 16884, 20318]
 
-json_dir = "C:\\Users\\huule\\Desktop\\School\\CS121\\DEV"
-index_file = "C:\\Users\\huule\\Desktop\\School\\CS121\\index"
-doc_index_file = "C:\\Users\\huule\\Desktop\\School\\CS121\\docIndexFile.txt"
+project_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py"
+json_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\ANALYST"
+index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\index"
+doc_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\docIndexFile.txt"
 
 index = dict()
 doc_index_dict = dict()
+results = set()
 
-output_file = "C:\\Users\\huule\\Desktop\\School\\CS121\\output.txt"
+output_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\output.txt"
 
 blank_space = '                                                                   '
 
@@ -148,8 +185,11 @@ urls_visited = set()
 def indexDocuments(docId):
     startId = docId
     numFiles = 0
-    path = pathlib.Path(json_dir + str(docId))
+    path = pathlib.Path(json_dir)
+    # path = pathlib.Path(json_dir + str(docId))
     totalStartTime = time.time()
+
+    print(path)
 
     for filename in path.rglob("*"):  # Look through all files and directories from a single path
         numFiles += 1  # Keep track of the number of files
@@ -180,7 +220,7 @@ def indexDocuments(docId):
             # Tokenize the text and build the inverted index
             for section in soup.find_all(text=True):  # Find all the text and their HTML tags in the file
                 if section.parent.name not in blacklist:  # If the tag is in our blacklisted section, skip it
-                    text = section.get_text()  # Get the text
+                    text = section.string  # Get the text
 
                     tokens = re.finditer(r'\b\w+\b',
                                          text.lower())  # Changed to find iter so we can save position of match
@@ -218,8 +258,11 @@ def indexDocuments(docId):
     tokenCount = 0  # For fun, get the number of tokens that need to be saved to show progress
 
     index_index = dict()  # Create an index for our index
-    if not pathlib.Path(index_file + str(startId)).exists(): pathlib.Path.mkdir(
-        index_file + str(startId))  # Create folder if it does not exist
+    # if not pathlib.Path(index_file + str(startId)).exists(): pathlib.Path.mkdir(
+    #     index_file + str(startId))  # Create folder if it does not exist
+
+    project_path = pathlib.Path(project_dir) / (index_file + str(startId))
+    project_path.mkdir()
 
     for token in sorted(index.keys()):  # For every token in our index
         # Open both the associated index (where the postings are stored) and index of index (where the position of the posting list is) file
@@ -263,156 +306,300 @@ def indexDocuments(docId):
     print('====== END ======')
 
 
-# Returns the posting information from a word based on its info in the index file
-# noinspection PyShadowingNames
-def getWordPostingFromFile(startingWord):
-    output = dict()
-    startingWord = startingWord.lower()  # Set the word to be all lower case
-    startingLetter = startingWord[0].upper()  # Get the first letter of the starting word
-    postingList = list()
-    for indexNum in indexLimits:  # For the all index files we have
-        index_file2 = index_file + str(indexNum)
-        try:
-            # Open both the index file and the index of the index file
-            with open(index_file2 + '\\index' + startingLetter + '.txt', 'r', encoding='utf-8') as f, open(
-                    index_file2 + '\\index' + startingLetter + 'Index.txt', 'r', encoding='utf-8') as f2:
-                if f is None or f2 is None: continue  # If the file doesn't exist, continue
+class SearchEngine:
+    def __init__(self):
+        self.index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\index"
+        self.doc_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\docIndexFile.txt"
+        self.index_limits = indexLimits
 
-                index_line = f2.readline()  # Read the line of the index of the index file
-                limit = 0
-                while index_line:  # While there is a line to read
-                    indexSplit = index_line.split(':')
-                    indexWord = indexSplit[0]
-                    indexPosition = int(indexSplit[1])  # Get the position of where the word starts in the index file
-                    # Temporary fix because index of index is wrong
-                    indexPosition += limit
-                    limit += 1
-                    # print(indexPosition)
+    def getWordPostingFromFile(self, startingWord):
+        output = dict()
+        startingWord = startingWord.lower()
+        startingLetter = startingWord[0].upper()
+        postingList = list()
+        for indexNum in self.index_limits:
+            index_file2 = self.index_file + str(indexNum)
+            try:
+                with open(index_file2 + '\\index' + startingLetter + '.txt', 'r', encoding='utf-8') as f, open(
+                        index_file2 + '\\index' + startingLetter + 'Index.txt', 'r', encoding='utf-8') as f2:
+                    if f is None or f2 is None:
+                        continue
 
-                    # Use this library to get the nearest similarity to the word
-                    if difflib.get_close_matches(startingWord, [indexWord], cutoff=0.85):
-                        f.seek(indexPosition)  # Get the position of the word in the index file
-                        postingLine = f.readline()  # Read where the word line is
-
-                        postingInfo = postingLine.split(' ')  # Split it so we have the word and its posting
-
-                        # Because special letters have a length greater than 1
-                        # We need to adjust the position so the seek is correct
-                        notABC = (char for char in postingInfo[0] if
-                                  char not in 'abcdefghijklmnopqrstuvwxyz0123456789|,\n-_\'')
-                        for char in notABC: limit += 1
-
-                        wordInfo = postingInfo[1].split('|')  # The postings are split with '|'
-                        for word in wordInfo:
-                            idAndPosition = word.split(',')  # The document ID and word position is split with ','
-                            if (
-                                    len(idAndPosition) != 3): continue  # Sometimes we get values that are not what we want, so skip them
-                            # Create and populate the postings
-                            posting = Posting()
-                            posting.setId(int(idAndPosition[0]))
-                            posting.setPosition(int(idAndPosition[1]))
-                            postingList.append(posting)
-                        break
                     index_line = f2.readline()
-        except FileNotFoundError:
-            pass
-        except UnicodeDecodeError:
-            pass
-    output[startingWord] = postingList
-    return output
+                    limit = 0
+                    while index_line:
+                        indexSplit = index_line.split(':')
+                        indexWord = indexSplit[0]
+                        indexPosition = int(indexSplit[1])
+                        indexPosition += limit
+                        limit += 1
 
+                        if difflib.get_close_matches(startingWord, [indexWord], cutoff=0.85):
+                            f.seek(indexPosition)
+                            postingLine = f.readline()
 
-# Calculate document frequencies from postings
-def getDocFrequencyFromPosting(postingDict):
-    output = dict()
-    for word, postings in postingDict.items():  # For the word and its postings
-        lastDocId = postings[0].getId()
-        docFreq = 0
-        docFreqList = list()
-        for posting in postings:  # For every posting in the list of postings
-            if lastDocId != posting.getId():  # If the docID changed, then we need to add up how many times its appeared
-                docFreqList.append((lastDocId, docFreq))
-                docFreq = 0
-            docFreq += 1
-            lastDocId = posting.getId()
-        docFreqList.append((lastDocId, docFreq))
-        output[word] = docFreqList
-    return output
+                            postingInfo = postingLine.split(' ')
+                            notABC = (char for char in postingInfo[0] if
+                                      char not in 'abcdefghijklmnopqrstuvwxyz0123456789|,\n-_\'')
+                            for char in notABC:
+                                limit += 1
 
+                            wordInfo = postingInfo[1].split('|')
+                            for word in wordInfo:
+                                idAndPosition = word.split(',')
+                                if len(idAndPosition) != 3:
+                                    continue
+                                posting = Posting()
+                                posting.setId(int(idAndPosition[0]))
+                                posting.setPosition(int(idAndPosition[1]))
+                                postingList.append(posting)
+                            break
+                        index_line = f2.readline()
+            except FileNotFoundError:
+                pass
+            except UnicodeDecodeError:
+                pass
+        output[startingWord] = postingList
+        return output
 
-# Calculate intersecting points across two different lists
-# Based on the notes in class
-def intersect(list1, list2):
-    output = list()
-    list1 = enumerate(list1)
-    list2 = enumerate(list2)
-    elem1 = next(list1, None)
-    elem2 = next(list2, None)
-    while elem1 is not None and elem2 is not None:
-        if elem1[1][0] == elem2[1][0]:
-            output.append(elem1[1])
-            elem1 = next(list1, None)
-            elem2 = next(list2, None)
-        elif elem1[1][0] < elem2[1][0]:
-            elem1 = next(list1, None)
-        else:
-            elem2 = next(list2, None)
-    return output
+    def getDocFrequencyFromPosting(self, postingDict):
+        output = dict()
+        for word, postings in postingDict.items():
+            lastDocId = postings[0].getId()
+            docFreq = 0
+            docFreqList = list()
+            for posting in postings:
+                if lastDocId != posting.getId():
+                    docFreqList.append((lastDocId, docFreq))
+                    docFreq = 0
+                docFreq += 1
+                lastDocId = posting.getId()
+            docFreqList.append((lastDocId, docFreq))
+            output[word] = docFreqList
+        return output
 
+    def intersect(self, list1, list2):
+        output = list()
+        list1 = enumerate(list1)
+        list2 = enumerate(list2)
+        elem1 = next(list1, None)
+        elem2 = next(list2, None)
+        while elem1 is not None and elem2 is not None:
+            if elem1[1][0] == elem2[1][0]:
+                output.append(elem1[1])
+                elem1 = next(list1, None)
+                elem2 = next(list2, None)
+            elif elem1[1][0] < elem2[1][0]:
+                elem1 = next(list1, None)
+            else:
+                elem2 = next(list2, None)
+        return output
 
-# Returns how many URLs were printed
-def printURLs(collection, limiter):
-    urls = set()
-    for freq in sorted(collection, key=lambda a: a[1], reverse=True):  # Sort list by value (by Doc Frequency)
-        if len(urls) == limiter: break
-        with open(doc_index_file, 'r') as f:
-            line = f.readline()
-            while line != '':  # Look through all the documents in the document to ID file
-                lineParse = line.split(';')
-                if freq[0] == int(lineParse[0]):
-                    with open(lineParse[1].strip('\n'), 'r') as f2:
-                        data = json.load(f2)
-                        link = data['url']
-                        defraggedURL = urldefrag(link)[0]  # Defrag the URL
-                        urls.add(defraggedURL)
+    def printURLs(self, collection, limiter):
+        urls = set()
+        for freq in sorted(collection, key=lambda a: a[1], reverse=True):
+            if len(urls) == limiter:
+                break
+            with open(self.doc_index_file, 'r') as f:
                 line = f.readline()
-    for url in urls:
-        print(url)
-    return len(urls)
+                while line != '':
+                    lineParse = line.split(';')
+                    if freq[0] == int(lineParse[0]):
+                        with open(lineParse[1].strip('\n'), 'r') as f2:
+                            data = json.load(f2)
+                            link = data['url']
+                            defraggedURL = urldefrag(link)[0]
+                            urls.add(defraggedURL)
+                    line = f.readline()
+        for url in urls:
+            results.add(url)
+
+        return len(urls)
+
+    def run_engine(self, query):
+        startTime = time.time()
+        test = list()
+        for word in query.split(' '):
+            word = ps.stem(word)
+            postingDict = self.getWordPostingFromFile(word)
+            postingFreq = self.getDocFrequencyFromPosting(postingDict)
+            test2 = list()
+            for freqList in postingFreq.values():
+                test2 += freqList
+            test.append(test2)
+        if len(test) == 1:
+            self.printURLs(test[0], 5)
+        else:
+            count = 1
+            compare = list()
+            while count < len(test):
+                if count > 1:
+                    compare = self.intersect(compare, test[count])
+                else:
+                    compare = self.intersect(test[0], test[1])
+                count += 1
+            limit = self.printURLs(compare, 5)
+            if limit < 5:
+                self.printURLs(test[0], 5 - limit)
+
+        endTime = time.time()
+        print("Query Time:", str((endTime - startTime) * 1000), 'ms')
+        return results
+
+# HUU'S OLD CODE
+# # Returns the posting information from a word based on its info in the index file
+# # noinspection PyShadowingNames
+# def getWordPostingFromFile(startingWord):
+#     output = dict()
+#     startingWord = startingWord.lower()  # Set the word to be all lower case
+#     startingLetter = startingWord[0].upper()  # Get the first letter of the starting word
+#     postingList = list()
+#     for indexNum in indexLimits:  # For the all index files we have
+#         index_file2 = index_file + str(indexNum)
+#         try:
+#             # Open both the index file and the index of the index file
+#             with open(index_file2 + '\\index' + startingLetter + '.txt', 'r', encoding='utf-8') as f, open(
+#                     index_file2 + '\\index' + startingLetter + 'Index.txt', 'r', encoding='utf-8') as f2:
+#                 if f is None or f2 is None: continue  # If the file doesn't exist, continue
+#
+#                 index_line = f2.readline()  # Read the line of the index of the index file
+#                 limit = 0
+#                 while index_line:  # While there is a line to read
+#                     indexSplit = index_line.split(':')
+#                     indexWord = indexSplit[0]
+#                     indexPosition = int(indexSplit[1])  # Get the position of where the word starts in the index file
+#                     # Temporary fix because index of index is wrong
+#                     indexPosition += limit
+#                     limit += 1
+#                     # print(indexPosition)
+#
+#                     # Use this library to get the nearest similarity to the word
+#                     if difflib.get_close_matches(startingWord, [indexWord], cutoff=0.85):
+#                         f.seek(indexPosition)  # Get the position of the word in the index file
+#                         postingLine = f.readline()  # Read where the word line is
+#
+#                         postingInfo = postingLine.split(' ')  # Split it so we have the word and its posting
+#
+#                         # Because special letters have a length greater than 1
+#                         # We need to adjust the position so the seek is correct
+#                         notABC = (char for char in postingInfo[0] if
+#                                   char not in 'abcdefghijklmnopqrstuvwxyz0123456789|,\n-_\'')
+#                         for char in notABC: limit += 1
+#
+#                         wordInfo = postingInfo[1].split('|')  # The postings are split with '|'
+#                         for word in wordInfo:
+#                             idAndPosition = word.split(',')  # The document ID and word position is split with ','
+#                             if (
+#                                     len(idAndPosition) != 3): continue  # Sometimes we get values that are not what we want, so skip them
+#                             # Create and populate the postings
+#                             posting = Posting()
+#                             posting.setId(int(idAndPosition[0]))
+#                             posting.setPosition(int(idAndPosition[1]))
+#                             postingList.append(posting)
+#                         break
+#                     index_line = f2.readline()
+#         except FileNotFoundError:
+#             pass
+#         except UnicodeDecodeError:
+#             pass
+#     output[startingWord] = postingList
+#     return output
+#
+#
+# # Calculate document frequencies from postings
+# def getDocFrequencyFromPosting(postingDict):
+#     output = dict()
+#     for word, postings in postingDict.items():  # For the word and its postings
+#         lastDocId = postings[0].getId()
+#         docFreq = 0
+#         docFreqList = list()
+#         for posting in postings:  # For every posting in the list of postings
+#             if lastDocId != posting.getId():  # If the docID changed, then we need to add up how many times its appeared
+#                 docFreqList.append((lastDocId, docFreq))
+#                 docFreq = 0
+#             docFreq += 1
+#             lastDocId = posting.getId()
+#         docFreqList.append((lastDocId, docFreq))
+#         output[word] = docFreqList
+#     return output
+#
+#
+# # Calculate intersecting points across two different lists
+# # Based on the notes in class
+# def intersect(list1, list2):
+#     output = list()
+#     list1 = enumerate(list1)
+#     list2 = enumerate(list2)
+#     elem1 = next(list1, None)
+#     elem2 = next(list2, None)
+#     while elem1 is not None and elem2 is not None:
+#         if elem1[1][0] == elem2[1][0]:
+#             output.append(elem1[1])
+#             elem1 = next(list1, None)
+#             elem2 = next(list2, None)
+#         elif elem1[1][0] < elem2[1][0]:
+#             elem1 = next(list1, None)
+#         else:
+#             elem2 = next(list2, None)
+#     return output
+#
+#
+# # Returns how many URLs were printed
+# def printURLs(collection, limiter):
+#     urls = set()
+#     for freq in sorted(collection, key=lambda a: a[1], reverse=True):  # Sort list by value (by Doc Frequency)
+#         if len(urls) == limiter: break
+#         with open(doc_index_file, 'r') as f:
+#             line = f.readline()
+#             while line != '':  # Look through all the documents in the document to ID file
+#                 lineParse = line.split(';')
+#                 if freq[0] == int(lineParse[0]):
+#                     with open(lineParse[1].strip('\n'), 'r') as f2:
+#                         data = json.load(f2)
+#                         link = data['url']
+#                         defraggedURL = urldefrag(link)[0]  # Defrag the URL
+#                         urls.add(defraggedURL)
+#                 line = f.readline()
+#     for url in urls:
+#         results.add(url)
+#         print(url)
+#     return len(urls)
+#
+#
+# def run_engine(query):
+#     startTime = time.time()
+#     test = list()
+#     for word in query.split(' '):
+#         word = ps.stem(word)
+#         postingDict = getWordPostingFromFile(word)
+#         postingFreq = getDocFrequencyFromPosting(postingDict)
+#         test2 = list()
+#         for freqList in postingFreq.values():
+#             test2 += freqList
+#         test.append(test2)
+#     if len(test) == 1:
+#         printURLs(test[0], 5)
+#     else:
+#         count = 1
+#         compare = list()
+#         while count < len(test):
+#             if count > 1:
+#                 compare = intersect(compare, test[count])
+#             else:
+#                 compare = intersect(test[0], test[1])
+#             count += 1
+#         limit = printURLs(compare, 5)
+#         if limit < 5:
+#             printURLs(test[0], 5 - limit)
+#
+#     endTime = time.time()
+#     print("Query Time:", str((endTime - startTime) * 1000), 'ms')
 
 
 if __name__ == '__main__':
-    # indexDocuments(indexLimits[5])
+    # indexDocuments(indexLimits[0])
     search_gui = SearchEngineGUI()
     search_gui.run()
-    query = search_gui.get_query()
-
-    startTime = time.time()
-    test = list()
-    for word in query.split(' '):
-        word = ps.stem(word)
-        postingDict = getWordPostingFromFile(word)
-        postingFreq = getDocFrequencyFromPosting(postingDict)
-        test2 = list()
-        for freqList in postingFreq.values():
-            test2 += freqList
-        test.append(test2)
-    if len(test) == 1:
-        printURLs(test[0], 5)
-    else:
-        count = 1
-        compare = list()
-        while count < len(test):
-            if count > 1:
-                compare = intersect(compare, test[count])
-            else:
-                compare = intersect(test[0], test[1])
-            count += 1
-        limit = printURLs(compare, 5)
-        if limit < 5:
-            printURLs(test[0], 5 - limit)
-    endTime = time.time()
-    print("Query Time:", str((endTime - startTime) * 1000), 'ms')
 
 # Write to the output file
 # output = ''
