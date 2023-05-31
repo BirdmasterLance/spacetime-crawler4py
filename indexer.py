@@ -134,7 +134,7 @@ class SearchEngineGUI:
 # Set up the stemmer
 ps = PorterStemmer()
 
-indexLimits = [0, 1307, 5367, 7946, 16884, 20318]
+indexLimits = [1307, 5367, 7946, 16884, 20318]
 
 project_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py"
 json_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\ANALYST"
@@ -182,8 +182,13 @@ urls_visited = set()
 # Function to build the index
 # Set docID to change the starting ID for the documents
 # noinspection PyTypeChecker
-def indexDocuments(docId):
-    startId = docId
+def indexDocuments(directory, startId):
+
+    json_dir = directory + "\\DEV"
+    index_file = directory + "\\index"
+    doc_index_file = directory + "\\docIndexFile.txt"
+
+    docId = startId
     numFiles = 0
     path = pathlib.Path(json_dir)
     # path = pathlib.Path(json_dir + str(docId))
@@ -210,19 +215,19 @@ def indexDocuments(docId):
             # Defrag the URL and compare it with future URLs to see if there are the same links down the line
             link = data['url']
             link = urldefrag(link)
-            if link in urls_visited:
+            if link[0] in urls_visited:
                 continue
             else:
-                urls_visited.add(link)
+                urls_visited.add(link[0])
 
             soup = BeautifulSoup(content, 'html.parser')  # Parse the HTML content
 
             # Tokenize the text and build the inverted index
-            for section in soup.find_all(text=True):  # Find all the text and their HTML tags in the file
+            for section in soup.find_all(string=True):  # Find all the text and their HTML tags in the file
                 if section.parent.name not in blacklist:  # If the tag is in our blacklisted section, skip it
                     text = section.string  # Get the text
 
-                    tokens = re.finditer(r'\b\w+\b',
+                    tokens = re.finditer(r'\b(\d+)|(([a-z]+)|([A-Z]))\b',
                                          text.lower())  # Changed to find iter so we can save position of match
                     for tokenMatch in tokens:  # For every token that matched our regex expression
                         token = ps.stem(tokenMatch.group())  # Stem the word to reduce repeated words
@@ -241,18 +246,26 @@ def indexDocuments(docId):
 
             # Save the document to the index of documents and document IDs
             with open(doc_index_file, 'a') as f:
-                f.write(str(docId) + ';' + filename + '\n')
-            docId += 1
+                f.write(str(docId) + ';' + filename + ';' + str(link[0]) + '\n')
 
             # For fun, print how long it took to complete the file
             endTime = time.time()
             print('Execution time for', filename, ': ', str(endTime - startTime))
 
-    # For fun, print how long it took to index the given documents
-    print('ran out of files to index through')
-    totalEndTime = time.time()
-    print('Total execution time:', str(totalEndTime - totalStartTime))
+            if(docId in indexLimits): 
+                # For fun, print how long it took to index the given documents
+                print('ran out of files to index through')
+                totalEndTime = time.time()
+                print('Total execution time:', str(totalEndTime - totalStartTime))
+                saveIndex(startId, project_dir, index_file)
+                startId = docId
 
+                
+            docId += 1
+    saveIndex(startId, project_dir, index_file)
+
+
+def saveIndex(startId, project_dir, index_file):
     writeStartTime = time.time()  # For fun, start time
     indexLength = len(index)  # For fun, get the current length of our index to see saving progress
     tokenCount = 0  # For fun, get the number of tokens that need to be saved to show progress
@@ -298,7 +311,9 @@ def indexDocuments(docId):
             f2.write(token + ':' + str(index_index[token[0].upper()]) + '\n')
             index_index[token[0].upper()] = index_index[token[0].upper()] + len(output)
             print('', end='\033[F')
-    print()
+    print()                
+    index.clear()
+    doc_index_dict.clear()
 
     # For fun, output how long it took to save the index to a file
     writeEndTime = time.time()
@@ -597,7 +612,7 @@ class SearchEngine:
 
 
 if __name__ == '__main__':
-    # indexDocuments(indexLimits[0])
+    # indexDocuments('C:\\Users\\huule\\Desktop\\School\\CS121', 0)
     search_gui = SearchEngineGUI()
     search_gui.run()
 
