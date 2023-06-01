@@ -10,7 +10,8 @@ from nltk.stem import PorterStemmer
 import difflib
 from urllib.parse import urldefrag
 import tkinter as tk
-from simhash import Simhash
+from simhash import Simhash, SimhashIndex
+from nltk.corpus import stopwords
 
 import time
 import math
@@ -145,8 +146,9 @@ class InvertedIndexer:
         self.index = defaultdict(list)
         self.doc_index_dict = {}
         self.urls_visited = set()
-        self.project_dir = "C:\\Users\\huule\\Documents\\GitHub\\spacetime-crawler4py"
-        self.json_dir = self.project_dir + "\\ANALYST2"
+        self.simhashIndex = SimhashIndex([], k=3)
+        self.project_dir = "C:\\Users\\huule\\Desktop\School\\CS121"
+        self.json_dir = self.project_dir + "\\DEV"
         self.index_file = self.project_dir + "\\index"
         self.doc_index_file = self.project_dir + "\\docIndexFile.txt"
         self.merge_index_file = self.project_dir + "\\mergeIndexFile.txt"
@@ -196,6 +198,15 @@ class InvertedIndexer:
 
                 soup = BeautifulSoup(content, 'html.parser')
 
+
+                simhashValue = Simhash(soup.get_text())
+                if len(self.simhashIndex.get_near_dups(simhashValue)) == 0:
+                    self.simhashIndex.add(numFiles, simhashValue)
+                else:
+                    print("================= SKIPPED {0} BECAUSE OF SIMILARITY ===============\n".format(filename))
+                    continue
+
+
                 for section in soup.find_all(text=True):
                     if section.parent.name not in self.blacklist:
                         text = section.string
@@ -228,6 +239,8 @@ class InvertedIndexer:
                     self.savePartialIndex(folder_path)
                     self.index.clear()
                     self.partial_index_count += 1
+        folder_path = pathlib.Path(
+                        self.project_dir + "\\partial_indexes")
         self.savePartialIndex(folder_path)
         print('ran out of files to index through')
         totalEndTime = time.time()
@@ -240,13 +253,17 @@ class InvertedIndexer:
 
         writeStartTime = time.time()
 
-        for token in sorted(self.index.keys()):
-            with open(
-                    partial_index_path / ('index' + token[0].upper() + '.txt'),
+        indexPos = 0
+        with open(
+                    partial_index_path / ('index' + '.txt'),
                     'a', encoding='utf-8'
-            ) as f:
-                numPostings = len(self.index[token])
+            ) as f, open(
+                    partial_index_path / ('index' + 'Index.txt'),
+                    'a', encoding='utf-8'
+            ) as f2:
+            for token in sorted(self.index.keys()):
                 progress = 0
+                numPostings = len(self.index[token])
 
                 output = token + ' '
                 for posting in self.index[token]:
@@ -259,6 +276,10 @@ class InvertedIndexer:
 
                 output = output[:-1] + '\n'
                 f.write(output)
+
+                f2.write(token + ':' + str(indexPos) + '\n')
+                indexPos += len(output)
+                print('', end='\033[F')
 
         writeEndTime = time.time()
 
@@ -353,16 +374,18 @@ class SearchEngine:
         self.index_file = self.project_dir + "\\mergeIndexFile.txt"
         self.doc_index_file = self.project_dir + "\\docIndexFile.txt"
         self.index_limits = indexLimits
+        
+        # List of stopwords
+        self.stopwords = list(stopwords.words('english'))
 
     def getWordPostingFromFile(self, startingWord):
         output = dict()
         startingWord = startingWord.lower()
-        startingLetter = startingWord[0].upper()
         postingList = list()
 
         try:
             indexPosition = 0
-            with open(self.project_dir + "\\partial_indexes\\index0\\index" + startingLetter + "Index.txt", 'r', encoding='utf-8') as f:
+            with open(self.project_dir + "\\partial_indexes\\partial1\\indexIndex.txt", 'r', encoding='utf-8') as f:
                 limit = 0
                 for line in f:
                     indexSplit = line.split(':')
@@ -371,12 +394,11 @@ class SearchEngine:
                     # Temporary fix because index of index is wrong
                     indexPosition += limit
                     limit += 1
-                    # print(indexPosition)
 
                     # Use this library to get the nearest similarity to the word
-                    if difflib.get_close_matches(startingWord, [indexWord], cutoff=0.85): 
+                    if difflib.get_close_matches(startingWord, [indexWord], cutoff=0.95): 
                         break
-            with open(self.project_dir + "\\partial_indexes\\index0\\index" + startingLetter + ".txt", 'r', encoding='utf-8') as f:
+            with open(self.project_dir + "\\partial_indexes\\partial1\\index.txt", 'r', encoding='utf-8') as f:
                 f.seek(indexPosition)
                 line = f.readline()
                 indexSplit = line.strip().split(' ')
@@ -471,13 +493,8 @@ class SearchEngine:
         startTime = time.time()
         test = list()
         for word in query.split(' '):
-            word = ps.stem(word)
-            # print(word)
-            # scores = self.getTFIDFNormalizedScore(word)
-            # scoreList = scores[word]
-            #for tup in scoreList:
-            #    print('docID: {0}, score: {1}'.format(tup[0], tup[1]))
-            
+            posting = self.getWordPostingFromFile(word)
+            postingFreq = self.getTermFrequencyFromPosting(posting)
             test2 = list()
             for freqList in postingFreq.values():
                 test2 += freqList
@@ -504,14 +521,13 @@ class SearchEngine:
 
 if __name__ == '__main__':
     # index = InvertedIndexer()
-    # index.indexDocuments(indexLimits[0])
+    # index.indexDocuments(0)
     #
     # # Off load the inverted index hash map from main memory to a partial index
     # index.saveIndexes()
     #
     # Merge the indexes
     # index.mergeIndexes()
-
     search_gui = SearchEngineGUI()
     search_gui.run()
 
