@@ -1,21 +1,66 @@
 import json
-import math
 import os
 import re
 import pathlib
 from collections import defaultdict
 from tkinter import scrolledtext
 
-import numpy as np
 from bs4 import BeautifulSoup
 from nltk.stem import PorterStemmer
 import difflib
 from urllib.parse import urldefrag
 import tkinter as tk
-from sklearn.feature_extraction.text import TfidfVectorizer
 from simhash import Simhash
 
 import time
+
+
+# Special class for posting to hold information per website
+# Needs some fixing so it can keep track of words PER document
+# as well as score PER document
+class Posting:
+    def __init__(self):
+        self.id = 0
+        self.wordFrequency = 0
+        # If the word in this URL is in header, bold, or strong, 
+        # then this posting is a little more important
+        self.importantScore = 0.0
+
+        # Save a list of what positions this word is at
+        self.position = '0'
+
+    def getWordFrequency(self):
+        return self.wordFrequency
+
+    def setWordFrequency(self, frequency):
+        self.wordFrequency = frequency
+
+    def setId(self, newId):
+        self.id = newId
+
+    def getId(self):
+        return self.id
+
+    def getImportantScore(self):
+        return self.importantScore
+
+    def setImportantScore(self, score):
+        self.importantScore = score
+
+    def getPosition(self):
+        return self.position
+
+    def setPosition(self, newPosition):
+        self.position = newPosition
+
+    def __eq__(self, other):
+        return (self.importantScore == other.importantScore) and (self.wordFrequency == other.wordFrequency)
+
+    def __lt__(self, other):
+        return (self.importantScore < other.importantScore) or (self.wordFrequency < other.wordFrequency)
+
+    def __le__(self, other):
+        return (self.importantScore <= other.importantScore) or (self.wordFrequency <= other.wordFrequency)
 
 
 def retrieve_search_results():
@@ -89,60 +134,8 @@ class SearchEngineGUI:
         self.window.mainloop()
 
 
-# Special class for posting to hold information per website
-# Needs some fixing so it can keep track of words PER document
-# as well as score PER document
-class Posting:
-    def __init__(self):
-        self.id = 0
-        self.wordFrequency = 0
-        # If the word in this URL is in header, bold, or strong, 
-        # then this posting is a little more important
-        self.importantScore = ""
-
-        # Save a list of what positions this word is at
-        self.position = '0'
-
-    def getWordFrequency(self):
-        return self.wordFrequency
-
-    def setWordFrequency(self, frequency):
-        self.wordFrequency = frequency
-
-    def setId(self, newId):
-        self.id = newId
-
-    def getId(self):
-        return self.id
-
-    def getImportantScore(self):
-        return self.importantScore
-
-    def setImportantScore(self, score):
-        self.importantScore = score
-
-    def getPosition(self):
-        return self.position
-
-    def setPosition(self, newPosition):
-        self.position = newPosition
-
-    def __eq__(self, other):
-        return (self.importantScore == other.importantScore) and (self.wordFrequency == other.wordFrequency)
-
-    def __lt__(self, other):
-        return (self.importantScore < other.importantScore) or (self.wordFrequency < other.wordFrequency)
-
-    def __le__(self, other):
-        return (self.importantScore <= other.importantScore) or (self.wordFrequency <= other.wordFrequency)
-
-
-# Used for testing partial indexes (faster time)
 indexLimits = [0, 1307, 5367, 7946, 16884, 20318]
-
-# Holds the results of the relevant websites
 results = set()
-
 ps = PorterStemmer()
 
 
@@ -156,7 +149,6 @@ class InvertedIndexer:
         self.index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\index"
         self.doc_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\docIndexFile.txt"
         self.merge_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\mergeIndexFile.txt"
-        self.document_vectors_file = os.path.join(self.project_dir, 'document_vectors.txt')
         self.blacklist = [
             '[document]',
             'noscript',
@@ -172,7 +164,6 @@ class InvertedIndexer:
         self.blank_space = '                                                                   '
         self.startId = None
         self.partial_index_count = 0
-        self.total_docs = 0
 
     def indexDocuments(self, docId):
         self.startId = docId
@@ -208,11 +199,11 @@ class InvertedIndexer:
                     if section.parent.name not in self.blacklist:
                         text = section.string
 
-                        tokens = re.finditer(r'\b([a-zA-Z0-9]+)\b', text.lower())
+                        tokens = re.finditer(r'\b\w+\b', text.lower())
                         for tokenMatch in tokens:
                             token = ps.stem(tokenMatch.group())
 
-                            if len(token) == 1 or token in self.blacklist:
+                            if len(token) == 1:
                                 continue
 
                             posting = Posting()
@@ -223,23 +214,20 @@ class InvertedIndexer:
 
                 with open(self.doc_index_file, 'a') as f:
                     f.write(str(docId) + ';' + filename + '\n')
-
                 self.doc_index_dict[docId] = filename
                 docId += 1
-                self.total_docs += 1  # Increment the total_docs counter
 
                 endTime = time.time()
-                # print('Execution time for', filename, ': ', str(endTime - startTime))
+                print('Execution time for', filename, ': ', str(endTime - startTime))
 
                 # Offload index to disk if the count reaches the limit
                 if len(self.index) >= 1000:
-                    folder_path = pathlib.Path("C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py"
-                                               "\\partial_indexes")
+                    folder_path = pathlib.Path(
+                        "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\partial_indexes")
                     self.savePartialIndex(folder_path)
                     self.index.clear()
                     self.partial_index_count += 1
-
-        print('Index completed...')
+        print('ran out of files to index through')
         totalEndTime = time.time()
         print('Total execution time:', str(totalEndTime - totalStartTime))
 
@@ -260,19 +248,15 @@ class InvertedIndexer:
 
                 output = token + ' '
                 for posting in self.index[token]:
-                    if posting.getImportantScore() in self.blacklist:
-                        continue
-
                     output += '{0},{1},{2}|'.format(
                         str(posting.getId()), str(posting.getPosition()), str(posting.getImportantScore())
                     )
 
-                    # progress += 1
-                    # print(token + ';' + str(progress) + '/' + str(numPostings) + self.blank_space, end='\r')
+                    progress += 1
+                    print(token + ';' + str(progress) + '/' + str(numPostings) + self.blank_space, end='\r')
 
-                if len(output) > len(token) + 1:
-                    output = output[:-1] + '\n'
-                    f.write(output)
+                output = output[:-1] + '\n'
+                f.write(output)
 
         writeEndTime = time.time()
 
@@ -310,23 +294,59 @@ class InvertedIndexer:
 
         print('Merge indexes completed.')
 
+    # def saveIndexes(self):
+    #
+    #     # Save the final merged index to disk
+    #     tokenCount = 0
+    #     indexLength = len(self.index)
+    #
+    #     index_index = defaultdict(int)
+    #
+    #     project_path = pathlib.Path(self.project_dir) / (self.index_file + str(self.startId))
+    #     project_path.mkdir()
+    #
+    #     writeStartTime = time.time()
+    #
+    #     for token in sorted(self.index.keys()):
+    #         tokenCount += 1
+    #         print('saving ' + token + ' to file ({0} / {1})'.format(tokenCount, indexLength) + self.blank_space)
+    #
+    #         with open(
+    #             self.index_file + str(self.startId) + '\\index' + token[0].upper() + '.txt',
+    #             'a', encoding='utf-8'
+    #         ) as f, open(
+    #             self.index_file + str(self.startId) + '\\index' + token[0].upper() + 'Index.txt',
+    #             'a', encoding='utf-8'
+    #         ) as f2:
+    #             numPostings = len(self.index[token])
+    #             progress = 0
+    #
+    #             output = token + ' '
+    #             for posting in self.index[token]:
+    #                 output += '{0},{1},{2}|'.format(
+    #                     str(posting.getId()), str(posting.getPosition()), str(posting.getImportantScore())
+    #                 )
+    #
+    #                 progress += 1
+    #                 print(token + ';' + str(progress) + '/' + str(numPostings) + self.blank_space, end='\r')
+    #
+    #             output = output[:-1] + '\n'
+    #             f.write(output)
+    #
+    #             f2.write(token + ':' + str(index_index[token[0].upper()]) + '\n')
+    #             index_index[token[0].upper()] += len(output)
+    #             print('', end='\033[F')
+    #     print()
+    #
+    #     writeEndTime = time.time()
+    #
+    #     print('Time it took to write to file:', str(writeEndTime - writeStartTime))
+    #     print('====== END ======')
+
 
 # noinspection PyMethodMayBeStatic
 class SearchEngine:
     def __init__(self):
-        self.blacklist = [
-            '[document]',
-            'noscript',
-            'html',
-            'meta',
-            'head',
-            'input',
-            'script',
-            'style',
-            'font',
-            'option'
-        ]
-        self.project_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py"
         self.index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\mergeIndexFile.txt"
         self.doc_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\docIndexFile.txt"
         self.index_limits = indexLimits
@@ -398,7 +418,7 @@ class SearchEngine:
                 elem2 = next(list2, None)
         return output
 
-    def returnURLs(self, collection, limiter):
+    def printURLs(self, collection, limiter):
         urls = set()
         for freq in sorted(collection, key=lambda a: a[1], reverse=True):
             if len(urls) == limiter:
@@ -414,65 +434,10 @@ class SearchEngine:
                             defraggedURL = urldefrag(link)[0]
                             urls.add(defraggedURL)
                     line = f.readline()
-
         for url in urls:
             results.add(url)
 
         return len(urls)
-
-    def vectorize(self, text):
-        corpus = []  # List to hold the documents for vectorization
-        # Add your document text to the corpus list
-        # For example, if you have a list of documents, you can append them to the corpus list
-
-        # Initialize the TF-IDF vectorizer
-        vectorizer = TfidfVectorizer()
-
-        # Fit the vectorizer on the corpus to learn the vocabulary and IDF weights
-        vectorizer.fit(corpus)
-
-        # Transform the given text using the learned vectorizer
-        vectorized_text = vectorizer.transform([text])
-
-        # Create a dictionary where the keys represent the words and the values represent the TF-IDF weights
-        feature_names = vectorizer.get_feature_names()
-        vectorized_dict = {}
-        for col in vectorized_text.nonzero()[1]:
-            vectorized_dict[feature_names[col]] = vectorized_text[0, col]
-
-        return vectorized_dict
-
-    def calculateCosineSimilarity(self, query, document):
-        print("hi")
-        print(document)
-        query_vector = self.vectorize(query)  # Function to convert query to a vector representation
-        document_vector = self.vectorize(document)  # Function to convert document to a vector representation
-
-        dot_product = sum(query_vector[word] * document_vector[word] for word in query_vector if word in document_vector)
-        query_norm = math.sqrt(sum(query_vector[word] ** 2 for word in query_vector))
-        document_norm = math.sqrt(sum(document_vector[word] ** 2 for word in document_vector))
-
-        cosine_similarity = dot_product / (query_norm * document_norm) if (query_norm * document_norm) != 0 else 0
-        return cosine_similarity
-
-    def retrieveURLs(self, collection, limiter):
-        urls = set()
-        for freq in sorted(collection, key=lambda a: a[1], reverse=True):
-            if len(urls) == limiter:
-                break
-            with open(self.doc_index_file, 'r') as f:
-                line = f.readline()
-                while line != '':
-                    lineParse = line.split(';')
-                    if freq[0] == int(lineParse[0]):
-                        with open(lineParse[1].strip('\n'), 'r') as f2:
-                            data = json.load(f2)
-                            link = data['url']
-                            defraggedURL = urldefrag(link)[0]
-                            urls.add(defraggedURL)
-                    line = f.readline()
-
-        return urls
 
     def run_engine(self, query):
         startTime = time.time()
@@ -486,7 +451,7 @@ class SearchEngine:
                 test2 += freqList
             test.append(test2)
         if len(test) == 1:
-            result_urls = self.retrieveURLs(test[0], 5)
+            self.printURLs(test[0], 5)
         else:
             count = 1
             compare = list()
@@ -496,79 +461,21 @@ class SearchEngine:
                 else:
                     compare = self.intersect(test[0], test[1])
                 count += 1
-            compare_urls = self.retrieveURLs(compare, 5)
-            if len(compare_urls) < 5:
-                remaining_urls = self.retrieveURLs(test[0], 5 - len(compare_urls))
-                result_urls = compare_urls.union(remaining_urls)
-            else:
-                result_urls = compare_urls
+            limit = self.printURLs(compare, 5)
+            if limit < 5:
+                self.printURLs(test[0], 5 - limit)
 
-        # # results = []
-        # for url in result_urls:
-        #     similarity = self.calculateCosineSimilarity(query, url)
-        #     results.append((url, similarity))
-        #
-        # endTime = time.time()
-        # print("Query Time:", str((endTime - startTime) * 1000), 'ms')
-
-        return result_urls
-
-    # def returnURLs(self, collection, limiter):
-    #     urls = set()
-    #     for freq in sorted(collection, key=lambda a: a[1], reverse=True):
-    #         if len(urls) == limiter:
-    #             break
-    #         with open(self.doc_index_file, 'r') as f:
-    #             line = f.readline()
-    #             while line != '':
-    #                 lineParse = line.split(';')
-    #                 if freq[0] == int(lineParse[0]):
-    #                     with open(lineParse[1].strip('\n'), 'r') as f2:
-    #                         data = json.load(f2)
-    #                         link = data['url']
-    #                         defraggedURL = urldefrag(link)[0]
-    #                         urls.add(defraggedURL)
-    #                 line = f.readline()
-    #
-    #     for url in urls:
-    #         results.add(url)
-    #
-    #     return len(urls)
-
-    # def run_engine(self, query):
-    #     startTime = time.time()
-    #     test = list()
-    #     for word in query.split(' '):
-    #         word = ps.stem(word)
-    #         postingDict = self.getWordPostingFromFile(word)
-    #         postingFreq = self.getDocFrequencyFromPosting(postingDict)
-    #         test2 = list()
-    #         for freqList in postingFreq.values():
-    #             test2 += freqList
-    #         test.append(test2)
-    #     if len(test) == 1:
-    #         self.returnURLs(test[0], 5)
-    #     else:
-    #         count = 1
-    #         compare = list()
-    #         while count < len(test):
-    #             if count > 1:
-    #                 compare = self.intersect(compare, test[count])
-    #             else:
-    #                 compare = self.intersect(test[0], test[1])
-    #             count += 1
-    #         limit = self.returnURLs(compare, 5)
-    #         if limit < 5:
-    #             self.returnURLs(test[0], 5 - limit)
-    #
-    #     endTime = time.time()
-    #     print("Query Time:", str((endTime - startTime) * 1000), 'ms')
-    #     return results
+        endTime = time.time()
+        print("Query Time:", str((endTime - startTime) * 1000), 'ms')
+        return results
 
 
 if __name__ == '__main__':
     # index = InvertedIndexer()
     # index.indexDocuments(indexLimits[0])
+    #
+    # # Off load the inverted index hash map from main memory to a partial index
+    # index.saveIndexes()
     #
     # # Merge the indexes
     # index.mergeIndexes()
@@ -919,52 +826,3 @@ if __name__ == '__main__':
 #             output = output[:-1] + ']'
 #         output += '\n'
 #         f.write(output)
-# OLD INDEXER
-# def saveIndexes(self):
-    #
-    #     # Save the final merged index to disk
-    #     tokenCount = 0
-    #     indexLength = len(self.index)
-    #
-    #     index_index = defaultdict(int)
-    #
-    #     project_path = pathlib.Path(self.project_dir) / (self.index_file + str(self.startId))
-    #     project_path.mkdir()
-    #
-    #     writeStartTime = time.time()
-    #
-    #     for token in sorted(self.index.keys()):
-    #         tokenCount += 1
-    #         print('saving ' + token + ' to file ({0} / {1})'.format(tokenCount, indexLength) + self.blank_space)
-    #
-    #         with open(
-    #             self.index_file + str(self.startId) + '\\index' + token[0].upper() + '.txt',
-    #             'a', encoding='utf-8'
-    #         ) as f, open(
-    #             self.index_file + str(self.startId) + '\\index' + token[0].upper() + 'Index.txt',
-    #             'a', encoding='utf-8'
-    #         ) as f2:
-    #             numPostings = len(self.index[token])
-    #             progress = 0
-    #
-    #             output = token + ' '
-    #             for posting in self.index[token]:
-    #                 output += '{0},{1},{2}|'.format(
-    #                     str(posting.getId()), str(posting.getPosition()), str(posting.getImportantScore())
-    #                 )
-    #
-    #                 progress += 1
-    #                 print(token + ';' + str(progress) + '/' + str(numPostings) + self.blank_space, end='\r')
-    #
-    #             output = output[:-1] + '\n'
-    #             f.write(output)
-    #
-    #             f2.write(token + ':' + str(index_index[token[0].upper()]) + '\n')
-    #             index_index[token[0].upper()] += len(output)
-    #             print('', end='\033[F')
-    #     print()
-    #
-    #     writeEndTime = time.time()
-    #
-    #     print('Time it took to write to file:', str(writeEndTime - writeStartTime))
-    #     print('====== END ======')

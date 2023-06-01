@@ -1,9 +1,0 @@
-zalg:0
-zero:239
-zhang:431
-zheng:477
-zilio:549
-zip:575
-zipf:2375
-zipfskew:3094
-zthr:3463
