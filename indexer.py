@@ -1,6 +1,8 @@
 import json
+import os
 import re
 import pathlib
+from collections import defaultdict
 from tkinter import scrolledtext
 
 from bs4 import BeautifulSoup
@@ -22,7 +24,7 @@ class Posting:
         self.wordFrequency = 0
         # If the word in this URL is in header, bold, or strong, 
         # then this posting is a little more important
-        self.importantScore = 0
+        self.importantScore = 0.0
 
         # Save a list of what positions this word is at
         self.position = '0'
@@ -105,6 +107,7 @@ class SearchEngineGUI:
         # Get the query from the entry field
         self.query = self.query_entry.get()
 
+        # Run the search engine
         search_results = self.search_engine.run_engine(self.query)
 
         self.results_window.delete("1.0", tk.END)
@@ -131,184 +134,220 @@ class SearchEngineGUI:
         self.window.mainloop()
 
 
-# Set up the stemmer
+indexLimits = [0, 1307, 5367, 7946, 16884, 20318]
+results = set()
 ps = PorterStemmer()
 
-indexLimits = [0, 1307, 5367, 7946, 16884, 20318]
 
-project_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py"
-json_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\ANALYST"
-index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\index"
-doc_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\docIndexFile.txt"
+class InvertedIndexer:
+    def __init__(self):
+        self.index = defaultdict(list)
+        self.doc_index_dict = {}
+        self.urls_visited = set()
+        self.project_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py"
+        self.json_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\ANALYST2"
+        self.index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\index"
+        self.doc_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\docIndexFile.txt"
+        self.merge_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\mergeIndexFile.txt"
+        self.blacklist = [
+            '[document]',
+            'noscript',
+            'html',
+            'meta',
+            'head',
+            'input',
+            'script',
+            'style',
+            'font',
+            'option'
+        ]
+        self.blank_space = '                                                                   '
+        self.startId = None
+        self.partial_index_count = 0
 
-index = dict()
-doc_index_dict = dict()
-results = set()
+    def indexDocuments(self, docId):
+        self.startId = docId
+        numFiles = 0
+        path = pathlib.Path(self.json_dir)
+        totalStartTime = time.time()
 
-output_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\output.txt"
+        partial_indexes_folder = os.path.join(self.project_dir, 'partial_indexes')
+        os.makedirs(partial_indexes_folder, exist_ok=True)  # Create partial_indexes folder if it doesn't exist
 
-blank_space = '                                                                   '
+        for filename in path.rglob("*"):
+            numFiles += 1
+            filename = str(filename)
 
-blacklist = [
-    '[document]',
-    'noscript',
-    'html',
-    'meta',
-    'head',
-    'input',
-    'script',
-    'style',
-    'font',
-    'option'
-]
+            if filename.endswith(".json"):
+                startTime = time.time()
 
-important_tags = [
-    'h1',
-    'h2',
-    'h3',
-    'h4',
-    'h5',
-    'h6',
-    'header',
-    'b',
-    'title',
-    'strong',
-    'em'
-]
+                with open(filename, "r") as f:
+                    data = json.load(f)
 
-urls_visited = set()
+                content = data["content"]
+
+                link = data['url']
+                link = urldefrag(link)
+                if link in self.urls_visited:
+                    continue
+                else:
+                    self.urls_visited.add(link)
+
+                soup = BeautifulSoup(content, 'html.parser')
+
+                for section in soup.find_all(text=True):
+                    if section.parent.name not in self.blacklist:
+                        text = section.string
+
+                        tokens = re.finditer(r'\b\w+\b', text.lower())
+                        for tokenMatch in tokens:
+                            token = ps.stem(tokenMatch.group())
+
+                            if len(token) == 1:
+                                continue
+
+                            posting = Posting()
+                            posting.setId(docId)
+                            posting.setPosition(tokenMatch.start())
+                            posting.setImportantScore(section.parent.name)
+                            self.index[token].append(posting)
+
+                with open(self.doc_index_file, 'a') as f:
+                    f.write(str(docId) + ';' + filename + '\n')
+                self.doc_index_dict[docId] = filename
+                docId += 1
+
+                endTime = time.time()
+                print('Execution time for', filename, ': ', str(endTime - startTime))
+
+                # Offload index to disk if the count reaches the limit
+                if len(self.index) >= 1000:
+                    folder_path = pathlib.Path(
+                        "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\partial_indexes")
+                    self.savePartialIndex(folder_path)
+                    self.index.clear()
+                    self.partial_index_count += 1
+        print('ran out of files to index through')
+        totalEndTime = time.time()
+        print('Total execution time:', str(totalEndTime - totalStartTime))
+
+    def savePartialIndex(self, folder_path):
+        self.partial_index_count += 1
+        partial_index_path = folder_path / ('partial' + str(self.partial_index_count))
+        partial_index_path.mkdir()
+
+        writeStartTime = time.time()
+
+        for token in sorted(self.index.keys()):
+            with open(
+                    partial_index_path / ('index' + token[0].upper() + '.txt'),
+                    'a', encoding='utf-8'
+            ) as f:
+                numPostings = len(self.index[token])
+                progress = 0
+
+                output = token + ' '
+                for posting in self.index[token]:
+                    output += '{0},{1},{2}|'.format(
+                        str(posting.getId()), str(posting.getPosition()), str(posting.getImportantScore())
+                    )
+
+                    progress += 1
+                    print(token + ';' + str(progress) + '/' + str(numPostings) + self.blank_space, end='\r')
+
+                output = output[:-1] + '\n'
+                f.write(output)
+
+        writeEndTime = time.time()
+
+        print('Time it took to write to file:', str(writeEndTime - writeStartTime))
+        print('====== NEXT PARTITION ======')
+
+    def mergeIndexes(self):
+        partial_indexes_folder = os.path.join(self.project_dir, 'partial_indexes')
+
+        # Get a list of all the partial index files
+        partial_index_files = [f for f in os.listdir(partial_indexes_folder) if f.startswith('partial')]
+
+        # Sort the partial index files based on their numeric suffix
+        partial_index_files.sort(key=lambda x: int(x[7:]))
+
+        # Open the merge index file
+        with open(self.merge_index_file, 'w', encoding='utf-8') as merge_file:
+            # Merge the partial indexes into the merge index file
+            for partial_index_file in partial_index_files:
+                partial_index_path = os.path.join(partial_indexes_folder, partial_index_file)
+
+                if os.path.isfile(partial_index_path):
+                    with open(partial_index_path, 'r', encoding='utf-8') as partial_file:
+                        merge_file.write(partial_file.read())
+                else:
+                    # Iterate over files in the partial index directory
+                    for filename in os.listdir(partial_index_path):
+                        file_path = os.path.join(partial_index_path, filename)
+                        if os.path.isfile(file_path):
+                            with open(file_path, 'r', encoding='utf-8') as partial_file:
+                                # Iterate over lines in the partial index file
+                                for line in partial_file:
+                                    # Write each line to the merge index file
+                                    merge_file.write(line)
+
+        print('Merge indexes completed.')
+
+    # def saveIndexes(self):
+    #
+    #     # Save the final merged index to disk
+    #     tokenCount = 0
+    #     indexLength = len(self.index)
+    #
+    #     index_index = defaultdict(int)
+    #
+    #     project_path = pathlib.Path(self.project_dir) / (self.index_file + str(self.startId))
+    #     project_path.mkdir()
+    #
+    #     writeStartTime = time.time()
+    #
+    #     for token in sorted(self.index.keys()):
+    #         tokenCount += 1
+    #         print('saving ' + token + ' to file ({0} / {1})'.format(tokenCount, indexLength) + self.blank_space)
+    #
+    #         with open(
+    #             self.index_file + str(self.startId) + '\\index' + token[0].upper() + '.txt',
+    #             'a', encoding='utf-8'
+    #         ) as f, open(
+    #             self.index_file + str(self.startId) + '\\index' + token[0].upper() + 'Index.txt',
+    #             'a', encoding='utf-8'
+    #         ) as f2:
+    #             numPostings = len(self.index[token])
+    #             progress = 0
+    #
+    #             output = token + ' '
+    #             for posting in self.index[token]:
+    #                 output += '{0},{1},{2}|'.format(
+    #                     str(posting.getId()), str(posting.getPosition()), str(posting.getImportantScore())
+    #                 )
+    #
+    #                 progress += 1
+    #                 print(token + ';' + str(progress) + '/' + str(numPostings) + self.blank_space, end='\r')
+    #
+    #             output = output[:-1] + '\n'
+    #             f.write(output)
+    #
+    #             f2.write(token + ':' + str(index_index[token[0].upper()]) + '\n')
+    #             index_index[token[0].upper()] += len(output)
+    #             print('', end='\033[F')
+    #     print()
+    #
+    #     writeEndTime = time.time()
+    #
+    #     print('Time it took to write to file:', str(writeEndTime - writeStartTime))
+    #     print('====== END ======')
 
 
-# Function to build the index
-# Set docID to change the starting ID for the documents
-# noinspection PyTypeChecker
-def indexDocuments(docId):
-    startId = docId
-    numFiles = 0
-    path = pathlib.Path(json_dir)
-    # path = pathlib.Path(json_dir + str(docId))
-    totalStartTime = time.time()
-
-    print(path)
-
-    for filename in path.rglob("*"):  # Look through all files and directories from a single path
-        numFiles += 1  # Keep track of the number of files
-        filename = str(filename)  # Get the string version of the file name
-
-        if filename.endswith(".json"):  # Check if the file is actually a JSON file
-            startTime = time.time()
-
-            # Read in the JSON data from the file
-            with open(filename, "r") as f:
-                data = json.load(f)
-
-            # Extract the text from the JSON data
-            content = data["content"]
-
-            # TODO: Implement SimHash
-
-            # Defrag the URL and compare it with future URLs to see if there are the same links down the line
-            link = data['url']
-            link = urldefrag(link)
-            if link in urls_visited:
-                continue
-            else:
-                urls_visited.add(link)
-
-            soup = BeautifulSoup(content, 'html.parser')  # Parse the HTML content
-
-            # Tokenize the text and build the inverted index
-            for section in soup.find_all(text=True):  # Find all the text and their HTML tags in the file
-                if section.parent.name not in blacklist:  # If the tag is in our blacklisted section, skip it
-                    text = section.string  # Get the text
-
-                    tokens = re.finditer(r'\b\w+\b',
-                                         text.lower())  # Changed to find iter so we can save position of match
-                    for tokenMatch in tokens:  # For every token that matched our regex expression
-                        token = ps.stem(tokenMatch.group())  # Stem the word to reduce repeated words
-
-                        if len(token) == 1: continue  # Don't save single letters and numbers
-
-                        if token not in index:
-                            index[token] = list()  # Initialize a new list of postings
-
-                        # Create posting that holds document information
-                        posting = Posting()
-                        posting.setId(docId)  # Set the posting's document ID
-                        posting.setPosition(tokenMatch.start())  # Save the position of the word in the
-                        posting.setImportantScore(section.parent.name)  # Save the tag the word is in
-                        index[token].append(posting)  # Append the posting to hte list
-
-            # Save the document to the index of documents and document IDs
-            with open(doc_index_file, 'a') as f:
-                f.write(str(docId) + ';' + filename + '\n')
-            docId += 1
-
-            # For fun, print how long it took to complete the file
-            endTime = time.time()
-            print('Execution time for', filename, ': ', str(endTime - startTime))
-
-    # For fun, print how long it took to index the given documents
-    print('ran out of files to index through')
-    totalEndTime = time.time()
-    print('Total execution time:', str(totalEndTime - totalStartTime))
-
-    writeStartTime = time.time()  # For fun, start time
-    indexLength = len(index)  # For fun, get the current length of our index to see saving progress
-    tokenCount = 0  # For fun, get the number of tokens that need to be saved to show progress
-
-    index_index = dict()  # Create an index for our index
-    # if not pathlib.Path(index_file + str(startId)).exists(): pathlib.Path.mkdir(
-    #     index_file + str(startId))  # Create folder if it does not exist
-
-    project_path = pathlib.Path(project_dir) / (index_file + str(startId))
-    project_path.mkdir()
-
-    for token in sorted(index.keys()):  # For every token in our index
-        # Open both the associated index (where the postings are stored) and index of index (where the position of the posting list is) file
-        with open(index_file + str(startId) + '\\index' + token[0].upper() + '.txt', 'a', encoding='utf-8') as f, open(
-                index_file + str(startId) + '\\index' + token[0].upper() + 'Index.txt', 'a', encoding='utf-8') as f2:
-            tokenCount += 1  # For fun, get the current token we are on
-            print('saving ' + token + ' to file ({0} / {1})'.format(tokenCount,
-                                                                    indexLength) + blank_space)  # Print the saving progress
-
-            # If the letter/number is NOT in the index of index, initialize it in the dict
-            if token[0].upper() not in index_index:
-                index_index[token[0].upper()] = 0
-
-            # For fun, get the number of postings for progress
-            numPostings = len(index[token])
-            progress = 0
-
-            # Initialize the output we will be writing to file
-            # NOTE: The output of the posting is as follow:
-            # token docID,wordPosition,tag|docID,wordPosition,tag|docID,wordPosition,tag|...
-            output = token + ' '
-            for posting in index[token]:
-                output += '{0},{1},{2}|'.format(str(posting.getId()), str(posting.getPosition()),
-                                                str(posting.getImportantScore()))
-
-                # For fun, output progress
-                progress += 1
-                print(token + ';' + str(progress) + '/' + str(numPostings) + blank_space, end='\r')
-
-            output = output[:-1] + '\n'
-            f.write(output)
-
-            f2.write(token + ':' + str(index_index[token[0].upper()]) + '\n')
-            index_index[token[0].upper()] = index_index[token[0].upper()] + len(output)
-            print('', end='\033[F')
-    print()
-
-    # For fun, output how long it took to save the index to a file
-    writeEndTime = time.time()
-    print('Time it took to write to file:', str(writeEndTime - writeStartTime))
-    print('====== END ======')
-
-
+# noinspection PyMethodMayBeStatic
 class SearchEngine:
     def __init__(self):
-        self.index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\index"
+        self.index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\mergeIndexFile.txt"
         self.doc_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\docIndexFile.txt"
         self.index_limits = indexLimits
 
@@ -317,48 +356,30 @@ class SearchEngine:
         startingWord = startingWord.lower()
         startingLetter = startingWord[0].upper()
         postingList = list()
-        for indexNum in self.index_limits:
-            index_file2 = self.index_file + str(indexNum)
-            try:
-                with open(index_file2 + '\\index' + startingLetter + '.txt', 'r', encoding='utf-8') as f, open(
-                        index_file2 + '\\index' + startingLetter + 'Index.txt', 'r', encoding='utf-8') as f2:
-                    if f is None or f2 is None:
-                        continue
 
-                    index_line = f2.readline()
-                    limit = 0
-                    while index_line:
-                        indexSplit = index_line.split(':')
-                        indexWord = indexSplit[0]
-                        indexPosition = int(indexSplit[1])
-                        indexPosition += limit
-                        limit += 1
+        try:
+            with open(self.index_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    indexSplit = line.strip().split(' ')
+                    indexWord = indexSplit[0]
+                    if indexWord == startingWord:
+                        postingsInfo = indexSplit[1].split('|')
+                        for postingInfo in postingsInfo:
+                            postingParts = postingInfo.split(',')
+                            if len(postingParts) != 3:
+                                continue
+                            posting = Posting()
+                            posting.setId(int(postingParts[0]))
+                            posting.setPosition(int(postingParts[1]))
+                            posting.setImportantScore(postingParts[2])
+                            postingList.append(posting)
+                        break
 
-                        if difflib.get_close_matches(startingWord, [indexWord], cutoff=0.85):
-                            f.seek(indexPosition)
-                            postingLine = f.readline()
+        except FileNotFoundError:
+            pass
+        except UnicodeDecodeError:
+            pass
 
-                            postingInfo = postingLine.split(' ')
-                            notABC = (char for char in postingInfo[0] if
-                                      char not in 'abcdefghijklmnopqrstuvwxyz0123456789|,\n-_\'')
-                            for char in notABC:
-                                limit += 1
-
-                            wordInfo = postingInfo[1].split('|')
-                            for word in wordInfo:
-                                idAndPosition = word.split(',')
-                                if len(idAndPosition) != 3:
-                                    continue
-                                posting = Posting()
-                                posting.setId(int(idAndPosition[0]))
-                                posting.setPosition(int(idAndPosition[1]))
-                                postingList.append(posting)
-                            break
-                        index_line = f2.readline()
-            except FileNotFoundError:
-                pass
-            except UnicodeDecodeError:
-                pass
         output[startingWord] = postingList
         return output
 
@@ -446,7 +467,195 @@ class SearchEngine:
         print("Query Time:", str((endTime - startTime) * 1000), 'ms')
         return results
 
+
+if __name__ == '__main__':
+    # index = InvertedIndexer()
+    # index.indexDocuments(indexLimits[0])
+    #
+    # # Off load the inverted index hash map from main memory to a partial index
+    # index.saveIndexes()
+    #
+    # # Merge the indexes
+    # index.mergeIndexes()
+
+    search_gui = SearchEngineGUI()
+    search_gui.run()
+
 # HUU'S OLD CODE
+#
+# Set up the stemmer
+# ps = PorterStemmer()
+#
+# indexLimits = [0, 1307, 5367, 7946, 16884, 20318]
+#
+# project_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py"
+# json_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\ANALYST"
+# index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\index"
+# doc_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\docIndexFile.txt"
+#
+# index = dict()
+# doc_index_dict = dict()
+# results = set()
+#
+# output_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\output.txt"
+#
+# blank_space = '                                                                   '
+#
+# blacklist = [
+#     '[document]',
+#     'noscript',
+#     'html',
+#     'meta',
+#     'head',
+#     'input',
+#     'script',
+#     'style',
+#     'font',
+#     'option'
+# ]
+#
+# important_tags = [
+#     'h1',
+#     'h2',
+#     'h3',
+#     'h4',
+#     'h5',
+#     'h6',
+#     'header',
+#     'b',
+#     'title',
+#     'strong',
+#     'em'
+# ]
+#
+# urls_visited = set()
+#
+#
+# # Function to build the index
+# # Set docID to change the starting ID for the documents
+# # noinspection PyTypeChecker
+# def indexDocuments(docId):
+#     startId = docId
+#     numFiles = 0
+#     path = pathlib.Path(json_dir)
+#     # path = pathlib.Path(json_dir + str(docId))
+#     totalStartTime = time.time()
+#
+#     for filename in path.rglob("*"):  # Look through all files and directories from a single path
+#         numFiles += 1  # Keep track of the number of files
+#         filename = str(filename)  # Get the string version of the file name
+#
+#         if filename.endswith(".json"):  # Check if the file is actually a JSON file
+#             startTime = time.time()
+#
+#             # Read in the JSON data from the file
+#             with open(filename, "r") as f:
+#                 data = json.load(f)
+#
+#             # Extract the text from the JSON data
+#             content = data["content"]
+#
+#             # TODO: Implement SimHash
+#
+#             # Defrag the URL and compare it with future URLs to see if there are the same links down the line
+#             link = data['url']
+#             link = urldefrag(link)
+#             if link in urls_visited:
+#                 continue
+#             else:
+#                 urls_visited.add(link)
+#
+#             soup = BeautifulSoup(content, 'html.parser')  # Parse the HTML content
+#
+#             # Tokenize the text and build the inverted index
+#             for section in soup.find_all(text=True):  # Find all the text and their HTML tags in the file
+#                 if section.parent.name not in blacklist:  # If the tag is in our blacklisted section, skip it
+#                     text = section.string  # Get the text
+#
+#                     tokens = re.finditer(r'\b\w+\b',
+#                                          text.lower())  # Changed to find iter so we can save position of match
+#                     for tokenMatch in tokens:  # For every token that matched our regex expression
+#                         token = ps.stem(tokenMatch.group())  # Stem the word to reduce repeated words
+#
+#                         if len(token) == 1: continue  # Don't save single letters and numbers
+#
+#                         if token not in index:
+#                             index[token] = list()  # Initialize a new list of postings
+#
+#                         # Create posting that holds document information
+#                         posting = Posting()
+#                         posting.setId(docId)  # Set the posting's document ID
+#                         posting.setPosition(tokenMatch.start())  # Save the position of the word in the
+#                         posting.setImportantScore(section.parent.name)  # Save the tag the word is in
+#                         index[token].append(posting)  # Append the posting to hte list
+#
+#             # Save the document to the index of documents and document IDs
+#             with open(doc_index_file, 'a') as f:
+#                 f.write(str(docId) + ';' + filename + '\n')
+#             docId += 1
+#
+#             # For fun, print how long it took to complete the file
+#             endTime = time.time()
+#             print('Execution time for', filename, ': ', str(endTime - startTime))
+#
+#     # For fun, print how long it took to index the given documents
+#     print('ran out of files to index through')
+#     totalEndTime = time.time()
+#     print('Total execution time:', str(totalEndTime - totalStartTime))
+#
+#     writeStartTime = time.time()  # For fun, start time
+#     indexLength = len(index)  # For fun, get the current length of our index to see saving progress
+#     tokenCount = 0  # For fun, get the number of tokens that need to be saved to show progress
+#
+#     index_index = dict()  # Create an index for our index
+#     # if not pathlib.Path(index_file + str(startId)).exists(): pathlib.Path.mkdir(
+#     #     index_file + str(startId))  # Create folder if it does not exist
+#
+#     project_path = pathlib.Path(project_dir) / (index_file + str(startId))
+#     project_path.mkdir()
+#
+#     for token in sorted(index.keys()):  # For every token in our index
+#         # Open both the associated index (where the postings are stored) and index of index (where the position of the posting list is) file
+#         with open(index_file + str(startId) + '\\index' + token[0].upper() + '.txt', 'a', encoding='utf-8') as f, open(
+#                 index_file + str(startId) + '\\index' + token[0].upper() + 'Index.txt', 'a', encoding='utf-8') as f2:
+#             tokenCount += 1  # For fun, get the current token we are on
+#             print('saving ' + token + ' to file ({0} / {1})'.format(tokenCount,
+#                                                                     indexLength) + blank_space)  # Print the saving progress
+#
+#             # If the letter/number is NOT in the index of index, initialize it in the dict
+#             if token[0].upper() not in index_index:
+#                 index_index[token[0].upper()] = 0
+#
+#             # For fun, get the number of postings for progress
+#             numPostings = len(index[token])
+#             progress = 0
+#
+#             # Initialize the output we will be writing to file
+#             # NOTE: The output of the posting is as follow:
+#             # token docID,wordPosition,tag|docID,wordPosition,tag|docID,wordPosition,tag|...
+#             output = token + ' '
+#             for posting in index[token]:
+#                 output += '{0},{1},{2}|'.format(str(posting.getId()), str(posting.getPosition()),
+#                                                 str(posting.getImportantScore()))
+#
+#                 # For fun, output progress
+#                 progress += 1
+#                 print(token + ';' + str(progress) + '/' + str(numPostings) + blank_space, end='\r')
+#
+#             output = output[:-1] + '\n'
+#             f.write(output)
+#
+#             f2.write(token + ':' + str(index_index[token[0].upper()]) + '\n')
+#             index_index[token[0].upper()] = index_index[token[0].upper()] + len(output)
+#             print('', end='\033[F')
+#     print()
+#
+#     # For fun, output how long it took to save the index to a file
+#     writeEndTime = time.time()
+#     print('Time it took to write to file:', str(writeEndTime - writeStartTime))
+#     print('====== END ======')
+#
+#
 # # Returns the posting information from a word based on its info in the index file
 # # noinspection PyShadowingNames
 # def getWordPostingFromFile(startingWord):
@@ -594,13 +803,7 @@ class SearchEngine:
 #
 #     endTime = time.time()
 #     print("Query Time:", str((endTime - startTime) * 1000), 'ms')
-
-
-if __name__ == '__main__':
-    # indexDocuments(indexLimits[0])
-    search_gui = SearchEngineGUI()
-    search_gui.run()
-
+#
 # Write to the output file
 # output = ''
 # with open(output_file, 'w') as f:
