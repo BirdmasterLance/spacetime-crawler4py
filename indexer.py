@@ -386,6 +386,8 @@ class SearchEngine:
     def getDocFrequencyFromPosting(self, postingDict):
         output = dict()
         for word, postings in postingDict.items():
+            if len(postings) == 0:
+                continue  # Skip if no postings available for the word
             lastDocId = postings[0].getId()
             docFreq = 0
             docFreqList = list()
