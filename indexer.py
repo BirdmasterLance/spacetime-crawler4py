@@ -13,6 +13,7 @@ import tkinter as tk
 from simhash import Simhash
 
 import time
+import math
 
 
 # Special class for posting to hold information per website
@@ -144,11 +145,11 @@ class InvertedIndexer:
         self.index = defaultdict(list)
         self.doc_index_dict = {}
         self.urls_visited = set()
-        self.project_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py"
-        self.json_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\ANALYST2"
-        self.index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\index"
-        self.doc_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\docIndexFile.txt"
-        self.merge_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\mergeIndexFile.txt"
+        self.project_dir = "C:\\Users\\huule\\Documents\\GitHub\\spacetime-crawler4py"
+        self.json_dir = self.project_dir + "\\ANALYST2"
+        self.index_file = self.project_dir + "\\index"
+        self.doc_index_file = self.project_dir + "\\docIndexFile.txt"
+        self.merge_index_file = self.project_dir + "\\mergeIndexFile.txt"
         self.blacklist = [
             '[document]',
             'noscript',
@@ -188,10 +189,10 @@ class InvertedIndexer:
 
                 link = data['url']
                 link = urldefrag(link)
-                if link in self.urls_visited:
+                if link[0] in self.urls_visited:
                     continue
                 else:
-                    self.urls_visited.add(link)
+                    self.urls_visited.add(link[0])
 
                 soup = BeautifulSoup(content, 'html.parser')
 
@@ -199,7 +200,7 @@ class InvertedIndexer:
                     if section.parent.name not in self.blacklist:
                         text = section.string
 
-                        tokens = re.finditer(r'\b\w+\b', text.lower())
+                        tokens = re.finditer(r'\b(\d+)|(([a-z]+)|([A-Z]))\b', text.lower())
                         for tokenMatch in tokens:
                             token = ps.stem(tokenMatch.group())
 
@@ -223,10 +224,11 @@ class InvertedIndexer:
                 # Offload index to disk if the count reaches the limit
                 if len(self.index) >= 1000:
                     folder_path = pathlib.Path(
-                        "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\partial_indexes")
+                        self.project_dir + "\\partial_indexes")
                     self.savePartialIndex(folder_path)
                     self.index.clear()
                     self.partial_index_count += 1
+        self.savePartialIndex(folder_path)
         print('ran out of files to index through')
         totalEndTime = time.time()
         print('Total execution time:', str(totalEndTime - totalStartTime))
@@ -347,8 +349,9 @@ class InvertedIndexer:
 # noinspection PyMethodMayBeStatic
 class SearchEngine:
     def __init__(self):
-        self.index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\mergeIndexFile.txt"
-        self.doc_index_file = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\docIndexFile.txt"
+        self.project_dir = "C:\\Users\\huule\\Documents\\GitHub\\spacetime-crawler4py"
+        self.index_file = self.project_dir + "\\mergeIndexFile.txt"
+        self.doc_index_file = self.project_dir + "\\docIndexFile.txt"
         self.index_limits = indexLimits
 
     def getWordPostingFromFile(self, startingWord):
@@ -358,22 +361,37 @@ class SearchEngine:
         postingList = list()
 
         try:
-            with open(self.index_file, 'r', encoding='utf-8') as f:
+            indexPosition = 0
+            with open(self.project_dir + "\\partial_indexes\\index0\\index" + startingLetter + "Index.txt", 'r', encoding='utf-8') as f:
+                limit = 0
                 for line in f:
-                    indexSplit = line.strip().split(' ')
+                    indexSplit = line.split(':')
                     indexWord = indexSplit[0]
-                    if indexWord == startingWord:
-                        postingsInfo = indexSplit[1].split('|')
-                        for postingInfo in postingsInfo:
-                            postingParts = postingInfo.split(',')
-                            if len(postingParts) != 3:
-                                continue
-                            posting = Posting()
-                            posting.setId(int(postingParts[0]))
-                            posting.setPosition(int(postingParts[1]))
-                            posting.setImportantScore(postingParts[2])
-                            postingList.append(posting)
+                    indexPosition = int(indexSplit[1])  # Get the position of where the word starts in the index file
+                    # Temporary fix because index of index is wrong
+                    indexPosition += limit
+                    limit += 1
+                    # print(indexPosition)
+
+                    # Use this library to get the nearest similarity to the word
+                    if difflib.get_close_matches(startingWord, [indexWord], cutoff=0.85): 
                         break
+            with open(self.project_dir + "\\partial_indexes\\index0\\index" + startingLetter + ".txt", 'r', encoding='utf-8') as f:
+                f.seek(indexPosition)
+                line = f.readline()
+                indexSplit = line.strip().split(' ')
+                indexWord = indexSplit[0]
+                if indexWord == startingWord:
+                    postingsInfo = indexSplit[1].split('|')
+                    for postingInfo in postingsInfo:
+                        postingParts = postingInfo.split(',')
+                        if len(postingParts) != 3:
+                            continue
+                        posting = Posting()
+                        posting.setId(int(postingParts[0]))
+                        posting.setPosition(int(postingParts[1]))
+                        posting.setImportantScore(postingParts[2])
+                        postingList.append(posting)
 
         except FileNotFoundError:
             pass
@@ -383,23 +401,37 @@ class SearchEngine:
         output[startingWord] = postingList
         return output
 
-    def getDocFrequencyFromPosting(self, postingDict):
+    def getTermFrequencyFromPosting(self, postingDict):
         output = dict()
-        for word, postings in postingDict.items():
+        termFreqList = list() # We are saving the term frequencies as a pair of (docID, termFreq)
+        for word, postings in postingDict.items(): # For every posting associated with a specific word
             if len(postings) == 0:
-                continue  # Skip if no postings available for the word
-            lastDocId = postings[0].getId()
-            docFreq = 0
-            docFreqList = list()
-            for posting in postings:
-                if lastDocId != posting.getId():
-                    docFreqList.append((lastDocId, docFreq))
-                    docFreq = 0
-                docFreq += 1
-                lastDocId = posting.getId()
-            docFreqList.append((lastDocId, docFreq))
-            output[word] = docFreqList
+                output[word] = termFreqList
+                return output  # Skip if no postings available for the word
+            lastDocId = postings[0].getId() # Get the current document ID we are on
+            termFreq = 0 # Get the number of times the term shows up in a specific document
+            for posting in postings: # For every posting
+                # If the current document ID we are on right now is NOT the same as the one before,
+                # then we are finished with that document
+                if lastDocId != posting.getId(): 
+                    termFreqList.append((lastDocId, 1 + math.log(termFreq,10))) # Save the score and the document in the list
+                    termFreq = 0
+                termFreq += 1 # Increment the number of times this term appears in by 1
+                lastDocId = posting.getId() # Update hte last document ID saved
+            termFreqList.append((lastDocId, 1 + math.log(termFreq,10)))
+        #termFreqList.sort(key=lambda x:x[1], reverse=True) # Sort termFrequencies in descending order (best scores on top)
+        output[word] = termFreqList
         return output
+
+    def getDocFrequencyFromPosting(self, postingDict):
+        pass
+
+    def getTFIDFNormalizedScore(self, word):
+        postingDict = self.getWordPostingFromFile(word)
+        termFrequency = self.getTermFrequencyFromPosting(postingDict)
+        documentFrequency = self.getDocFrequencyFromPosting(postingDict)
+        pass
+        
 
     def intersect(self, list1, list2):
         output = list()
@@ -428,11 +460,7 @@ class SearchEngine:
                 while line != '':
                     lineParse = line.split(';')
                     if freq[0] == int(lineParse[0]):
-                        with open(lineParse[1].strip('\n'), 'r') as f2:
-                            data = json.load(f2)
-                            link = data['url']
-                            defraggedURL = urldefrag(link)[0]
-                            urls.add(defraggedURL)
+                        urls.add(lineParse[2])
                     line = f.readline()
         for url in urls:
             results.add(url)
@@ -444,8 +472,12 @@ class SearchEngine:
         test = list()
         for word in query.split(' '):
             word = ps.stem(word)
-            postingDict = self.getWordPostingFromFile(word)
-            postingFreq = self.getDocFrequencyFromPosting(postingDict)
+            # print(word)
+            # scores = self.getTFIDFNormalizedScore(word)
+            # scoreList = scores[word]
+            #for tup in scoreList:
+            #    print('docID: {0}, score: {1}'.format(tup[0], tup[1]))
+            
             test2 = list()
             for freqList in postingFreq.values():
                 test2 += freqList
@@ -477,7 +509,7 @@ if __name__ == '__main__':
     # # Off load the inverted index hash map from main memory to a partial index
     # index.saveIndexes()
     #
-    # # Merge the indexes
+    # Merge the indexes
     # index.mergeIndexes()
 
     search_gui = SearchEngineGUI()
