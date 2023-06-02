@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 from nltk.stem import PorterStemmer
 from urllib.parse import urldefrag
 import tkinter as tk
-from simhash import Simhash
+from simhash import Simhash, SimhashIndex
 import difflib
 
 import time
@@ -135,10 +135,10 @@ results = set()
 ps = PorterStemmer()
 
 # IMPORTANT -> Edit project_dir to the path of your project folder <- IMPORTANT
-project_dir = "C:\\Users\\huule\\Documents\\GitHub\\spacetime-crawler4py"
+project_dir = "C:\\Users\\huule\\Desktop\\School\\CS121"
 
 # IMPORTANT -> Edit json_dir to the path of your DEV (containing JSON) folder <- IMPORTANT
-json_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\DEV"
+json_dir = "C:\\Users\\huule\\Desktop\\School\\CS121\\DEV"
 
 
 class InvertedIndexer:
@@ -146,7 +146,7 @@ class InvertedIndexer:
         self.index = defaultdict(list)
         self.doc_index_dict = {}
         self.urls_visited = set()
-
+        self.simhashIndex = SimhashIndex([], k=3)
         self.index_file = project_dir + "\\index"
         self.doc_index_file = project_dir + "\\docIndexFile.txt"
         self.merge_index_file = project_dir + "\\mergeIndexFile.txt"
@@ -190,33 +190,41 @@ class InvertedIndexer:
 
                 link = data['url']
                 link = urldefrag(link)
-                if link in self.urls_visited:
+                if link[0] in self.urls_visited:
                     continue
                 else:
-                    self.urls_visited.add(link)
+                    self.urls_visited.add(link[0])
 
                 soup = BeautifulSoup(content, 'html.parser')
 
-                for section in soup.find_all(text=True):
-                    if section.parent.name not in self.blacklist:
-                        text = section.string
 
-                        tokens = re.finditer(r'\b\w+\b', text.lower())
-                        for tokenMatch in tokens:
-                            token = ps.stem(tokenMatch.group())
+                simhashValue = Simhash(soup.get_text())
+                if len(self.simhashIndex.get_near_dups(simhashValue)) == 0:
+                    self.simhashIndex.add(numFiles, simhashValue)
+                else:
+                    print("================= SKIPPED {0} BECAUSE OF SIMILARITY ===============\n".format(filename))
+                    continue
 
-                            if len(token) == 1:
-                                continue
 
-                            # Write to index as a Posting object
-                            posting = Posting()
-                            posting.setId(docId)
-                            posting.setPosition(tokenMatch.start())
-                            posting.setImportantScore(section.parent.name)
-                            self.index[token].append(posting)
+                # for section in soup.find_all(text=True):
+                #     if section.parent.name not in self.blacklist:
+                #         text = section.string
+
+                #         tokens = re.finditer(r'\b(\d+)|(([a-z]+)|([A-Z]))\b', text.lower())
+                #         for tokenMatch in tokens:
+                #             token = ps.stem(tokenMatch.group())
+
+                #             if len(token) == 1:
+                #                 continue
+
+                #             posting = Posting()
+                #             posting.setId(docId)
+                #             posting.setPosition(tokenMatch.start())
+                #             posting.setImportantScore(section.parent.name)
+                #             self.index[token].append(posting)
 
                 with open(self.doc_index_file, 'a') as f:
-                    f.write(str(docId) + ';' + filename + '\n')
+                    f.write(str(docId) + ';' + filename + ';' + str(link[0]) + '\n')
                 self.doc_index_dict[docId] = filename
                 docId += 1
 
@@ -224,13 +232,15 @@ class InvertedIndexer:
                 print('Execution time for', filename, ': ', str(endTime - startTime))
 
                 # Offload index to disk if the count reaches the limit
-                if len(self.index) >= 100000:
-                    folder_path = pathlib.Path(
-                        "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\partial_indexes")
-                    self.savePartialIndex(folder_path)
-                    self.index.clear()
-                    self.partial_index_count += 1
-
+        #         if len(self.index) >= 1000:
+        #             folder_path = pathlib.Path(
+        #                 project_dir + "\\partial_indexes")
+        #             self.savePartialIndex(folder_path)
+        #             self.index.clear()
+        #             self.partial_index_count += 1
+        # folder_path = pathlib.Path(
+        #                 project_dir + "\\partial_indexes")
+        # self.savePartialIndex(folder_path)
         print('ran out of files to index through')
         totalEndTime = time.time()
         print('Total execution time:', str(totalEndTime - totalStartTime))
@@ -242,13 +252,17 @@ class InvertedIndexer:
 
         writeStartTime = time.time()
 
-        for token in sorted(self.index.keys()):
-            with open(
-                    partial_index_path / ('index' + token[0].upper() + '.txt'),
+        indexPos = 0
+        with open(
+                    partial_index_path / ('index' + '.txt'),
                     'a', encoding='utf-8'
-            ) as f:
-                numPostings = len(self.index[token])
+            ) as f, open(
+                    partial_index_path / ('index' + 'Index.txt'),
+                    'a', encoding='utf-8'
+            ) as f2:
+            for token in sorted(self.index.keys()):
                 progress = 0
+                numPostings = len(self.index[token])
 
                 output = token + ' '
                 for posting in self.index[token]:
@@ -261,6 +275,10 @@ class InvertedIndexer:
 
                 output = output[:-1] + '\n'
                 f.write(output)
+
+                f2.write(token + ':' + str(indexPos) + '\n')
+                indexPos += len(output)
+                print('', end='\033[F')
 
         writeEndTime = time.time()
 
@@ -418,11 +436,7 @@ class SearchEngine:
                 while line != '':
                     lineParse = line.split(';')
                     if freq[0] == int(lineParse[0]):
-                        with open(lineParse[1].strip('\n'), 'r') as f2:
-                            data = json.load(f2)
-                            link = data['url']
-                            defraggedURL = urldefrag(link)[0]
-                            urls.add(defraggedURL)
+                            urls.add(lineParse[2])
                     line = f.readline()
 
         for url in urls:
@@ -521,7 +535,7 @@ class SearchEngine:
 if __name__ == '__main__':
     # Comment out below after index creation
     # index = InvertedIndexer()
-    # index.indexDocuments(indexLimits[0])
+    # index.indexDocuments(0)
     # index.mergeIndexes()
     # Comment out above after index creation
 
