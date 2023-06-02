@@ -400,6 +400,23 @@ class SearchEngine:
             docFreqList.append((lastDocId, docFreq))
             output[word] = docFreqList
         return output
+    
+    def getInverseDocFrequencyFromPosting(self, postingDict):
+        output = dict() # the dictionary that will be returned, with 
+        docCount = 40140 # number of valid documents being looked at
+        relevantDocs = set() # going to hold the docs the term appears in (a set is used to avoid duplicate docIDs being counted twice)
+        inverseFreq = 0 # going to hold the inverse document frequency value
+        for word, postings in postingDict.items():
+            for post in postings:
+                relevantDocs.add(post)
+            output[word] = len(relevantDocs)  # create the entry in the dictionary and the length of its associated value, representing
+            # the number of docs it appears in
+        
+        for word, docFreq in output.items():
+            inverseFreq = math.log(docCount/docFreq) # using the document frequency from before, taking log of all docs / this term's doc freq
+            ouput[word] = inverseFreq # replace the document frequency value with the inverse doc frequency
+        
+        return output
 
     def intersect(self, list1, list2):
         output = list()
