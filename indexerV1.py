@@ -11,6 +11,7 @@ from nltk.stem import PorterStemmer
 from urllib.parse import urldefrag
 import tkinter as tk
 from simhash import Simhash
+import difflib
 
 import time
 
@@ -134,7 +135,7 @@ results = set()
 ps = PorterStemmer()
 
 # IMPORTANT -> Edit project_dir to the path of your project folder <- IMPORTANT
-project_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py"
+project_dir = "C:\\Users\\huule\\Documents\\GitHub\\spacetime-crawler4py"
 
 # IMPORTANT -> Edit json_dir to the path of your DEV (containing JSON) folder <- IMPORTANT
 json_dir = "C:\\Users\\Jeffrey Qin\\PycharmProjects\\spacetime-crawler4py\\DEV"
@@ -302,32 +303,46 @@ class InvertedIndexer:
 class SearchEngine:
     def __init__(self):
         self.index_file = project_dir + "\\mergeIndexFile.txt"
+        self.index_of_index_file = project_dir + "\\mergeIndexIndexFile.txt"
         self.doc_index_file = project_dir + "\\docIndexFile.txt"
         self.index_limits = indexLimits
 
     def getWordPostingFromFile(self, startingWord):
         output = dict()
         startingWord = startingWord.lower()
-        startingLetter = startingWord[0].upper()
         postingList = list()
 
         try:
-            with open(self.index_file, 'r', encoding='utf-8') as f:
+            indexPosition = 0
+            with open(self.index_of_index_file, 'r', encoding='utf-8') as f:
+                limit = 0
                 for line in f:
-                    indexSplit = line.strip().split(' ')
+                    indexSplit = line.split(':')
                     indexWord = indexSplit[0]
-                    if indexWord == startingWord:
-                        postingsInfo = indexSplit[1].split('|')
-                        for postingInfo in postingsInfo:
-                            postingParts = postingInfo.split(',')
-                            if len(postingParts) != 3:
-                                continue
-                            posting = Posting()
-                            posting.setId(int(postingParts[0]))
-                            posting.setPosition(int(postingParts[1]))
-                            posting.setImportantScore(postingParts[2])
-                            postingList.append(posting)
+                    indexPosition = int(indexSplit[1])  # Get the position of where the word starts in the index file
+                    # Temporary fix because index of index is wrong
+                    indexPosition += limit
+                    limit += 1
+
+                    # Use this library to get the nearest similarity to the word
+                    if difflib.get_close_matches(startingWord, [indexWord], cutoff=0.95): 
                         break
+            with open(self.index_file, 'r', encoding='utf-8') as f:
+                f.seek(indexPosition)
+                line = f.readline()
+                indexSplit = line.strip().split(' ')
+                indexWord = indexSplit[0]
+                if indexWord == startingWord:
+                    postingsInfo = indexSplit[1].split('|')
+                    for postingInfo in postingsInfo:
+                        postingParts = postingInfo.split(',')
+                        if len(postingParts) != 3:
+                            continue
+                        posting = Posting()
+                        posting.setId(int(postingParts[0]))
+                        posting.setPosition(int(postingParts[1]))
+                        posting.setImportantScore(postingParts[2])
+                        postingList.append(posting)
 
         except FileNotFoundError:
             pass
@@ -336,23 +351,44 @@ class SearchEngine:
 
         output[startingWord] = postingList
         return output
-
-    def getDocFrequencyFromPosting(self, postingDict):
+    
+    def getTermFrequencyFromPosting(self, postingDict):
         output = dict()
-        for word, postings in postingDict.items():
+        termFreqList = list() # We are saving the term frequencies as a pair of (docID, termFreq)
+        for word, postings in postingDict.items(): # For every posting associated with a specific word
             if len(postings) == 0:
-                continue  # Skip if no postings available for the word
-            lastDocId = postings[0].getId()
-            docFreq = 0
-            docFreqList = list()
-            for posting in postings:
-                if lastDocId != posting.getId():
-                    docFreqList.append((lastDocId, docFreq))
-                    docFreq = 0
-                docFreq += 1
-                lastDocId = posting.getId()
-            docFreqList.append((lastDocId, docFreq))
-            output[word] = docFreqList
+                output[word] = termFreqList
+                return output  # Skip if no postings available for the word
+            lastDocId = postings[0].getId() # Get the current document ID we are on
+            termFreq = 0 # Get the number of times the term shows up in a specific document
+            for posting in postings: # For every posting
+                # If the current document ID we are on right now is NOT the same as the one before,
+                # then we are finished with that document
+                if lastDocId != posting.getId(): 
+                    termFreqList.append((lastDocId, 1 + math.log(termFreq,10))) # Save the score and the document in the list
+                    termFreq = 0
+                termFreq += 1 # Increment the number of times this term appears in by 1
+                lastDocId = posting.getId() # Update hte last document ID saved
+            termFreqList.append((lastDocId, 1 + math.log(termFreq,10)))
+        #termFreqList.sort(key=lambda x:x[1], reverse=True) # Sort termFrequencies in descending order (best scores on top)
+        output[word] = termFreqList
+        return output
+
+    def getInverseDocFrequencyFromPosting(self, postingDict):
+        output = dict() # the dictionary that will be returned, with 
+        docCount = 40140 # number of valid documents being looked at
+        relevantDocs = list() # going to hold the docs the term appears in (a set is used to avoid duplicate docIDs being counted twice)
+        inverseFreq = 0 # going to hold the inverse document frequency value
+        for word, postings in postingDict.items():
+            for post in postings:
+                relevantDocs.append(post)
+            output[word] = len(relevantDocs)  # create the entry in the dictionary and the length of its associated value, representing
+            # the number of docs it appears in
+        
+        for word, docFreq in output.items():
+            inverseFreq = math.log(docCount/docFreq) # using the document frequency from before, taking log of all docs / this term's doc freq
+            output[word] = inverseFreq # replace the document frequency value with the inverse doc frequency
+        
         return output
 
     def intersect(self, list1, list2):
@@ -433,9 +469,19 @@ class SearchEngine:
         for word in query.split(' '):
             word = ps.stem(word)
             postingDict = self.getWordPostingFromFile(word)
-            postingFreq = self.getDocFrequencyFromPosting(postingDict)
+            postingTermFreq = self.getTermFrequencyFromPosting(postingDict)
+            postingDocFreq = self.getInverseDocFrequencyFromPosting(postingDict)
+            
+            # Delete later this is just how i see what values are in term and inverse doc frequency
+            # for postingList in postingTermFreq.values():
+            #     for posting in postingList:
+            #         print('docID: {0} termFreq: {1}'.format(posting[0], posting[1]))
+            # for term, freq in postingDocFreq.items():
+            #     print('term: {0} InverseDocFreq: {1}'.format(term, freq))
+            
+            
             test2 = list()
-            for freqList in postingFreq.values():
+            for freqList in postingTermFreq.values():
                 test2 += freqList
             test.append(test2)
         if len(test) == 1:
