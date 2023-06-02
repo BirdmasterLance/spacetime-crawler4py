@@ -15,6 +15,9 @@ from simhash import Simhash
 import time
 
 
+# IMPORTANT: PLEASE NAVIGATE TO LINES 133 and 136 TO CHANGE YOUR DIRECTORY PATHS
+# IMPORTANT: PLEASE NAVIGATE TO LINE 464 FOR INSTRUCTIONS ON RUNNING THE PROGRAM
+
 # Interface for the search engine
 class SearchEngineGUI:
     def __init__(self):
@@ -58,12 +61,15 @@ class SearchEngineGUI:
         # Reset the results window
         self.results_window.delete("1.0", tk.END)
 
-        # Run the search engine
-        search_results, self.query_time = self.search_engine.run_engine(self.query)
+        # Do not except empty strings
+        if len(self.query.strip()) > 0:
 
-        # Display the search results in the results window
-        for result in search_results:
-            self.results_window.insert(tk.END, result + "\n")
+            # Run the search engine
+            search_results, self.query_time = self.search_engine.run_engine(self.query)
+
+            # Display the search results in the results window
+            for result in search_results:
+                self.results_window.insert(tk.END, result + "\n")
 
         # Update the query time label
         self.time_label.config(text="Time to fetch webpages: " + str(self.query_time))
@@ -460,6 +466,12 @@ class SearchEngine:
         return result_urls, str((endTime - startTime))
 
 
+# README:
+# Step 1: Ensure that you have corrected the folder paths on lines 133 and 136
+# Step 2: If this is your first time running the program (no index created yet), uncomment lines 469-471
+# Step 3: The program will run on the DEV (or otherwise selected) folder, and will create an inverted index
+# Step 4: The program will then launch an interface to search queries
+# NOTE: Comment out lines 472-475 after the index creation
 if __name__ == '__main__':
     # Comment out below after index creation
     # index = InvertedIndexer()
