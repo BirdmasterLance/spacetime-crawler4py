@@ -68,11 +68,8 @@ class SearchEngineGUI:
             search_results, self.query_time = self.search_engine.run_engine(self.query)
 
             # Display the search results in the results window
-            counter = 0
             for result in search_results:
-                if counter < 5:
-                    self.results_window.insert(tk.END, result + "\n")
-                    counter += 1
+                self.results_window.insert(tk.END, result + "\n")
 
         # Update the query time label
         self.time_label.config(text="Time to fetch webpages: " + str(self.query_time))
@@ -465,6 +462,7 @@ class SearchEngine:
         #     results.append((url, similarity))
 
         endTime = time.time()
+        print("Query Time:", str((endTime - startTime) * 1000), 'ms')
         return result_urls, str((endTime - startTime))
 
 

@@ -400,6 +400,37 @@ class SearchEngine:
             docFreqList.append((lastDocId, docFreq))
             output[word] = docFreqList
         return output
+    
+    def getInverseDocFrequencyFromPosting(self, postingDict):
+        output = dict() # the dictionary that will be returned, with 
+        docCount = 40140 # number of valid documents being looked at
+        relevantDocs = set() # going to hold the docs the term appears in (a set is used to avoid duplicate docIDs being counted twice)
+        inverseFreq = 0 # going to hold the inverse document frequency value
+        for word, postings in postingDict.items():
+            for post in postings:
+                relevantDocs.add(post)
+            output[word] = len(relevantDocs)  # create the entry in the dictionary and the length of its associated value, representing
+            # the number of docs it appears in
+        
+        for word, docFreq in output.items():
+            inverseFreq = math.log(docCount/docFreq) # using the document frequency from before, taking log of all docs / this term's doc freq
+            ouput[word] = inverseFreq # replace the document frequency value with the inverse doc frequency
+        
+        return output
+    
+    def getTFIDF(self, TFDict, IDFDict)
+    output = dict() # will hold the final tf-idf value associated with the term
+    
+    tfIdf = 0 # will eventually hold the tf-idf value
+    for term, Tfrequency in TFDict.items(): # looks for the term frequency first
+        docTfIdfList = list() # a list that will hold all tf-idf values and their associated doc IDs
+        for indivDoc in Tfrequency: # looping through the list of frequencies in each doc for each term
+            tfIdf = indivDoc[1] * IDFDict[term] # multiplying the term frequency by general IDF
+            docTfIdfList.append((indivDoc[0], tfIdf)) # appending a tuple holding the docID and tfIdf
+    
+        output[term] = docTfIdfList # stores the final tf-idf values and their docIDs in the dictionary being returned
+    
+    return output
 
     def intersect(self, list1, list2):
         output = list()
