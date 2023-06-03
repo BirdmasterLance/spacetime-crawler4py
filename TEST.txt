@@ -1,0 +1,27 @@
+Test Queries
+
+Poor performance:
+# 1-8: long query time due to multi-word query, added cosine similarity to reduce documents parsed
+1. interesting science test
+2. The quick brown fox jumps over the lazy dog
+3. Donald Bren School of Information & Computer Sciences
+4. video game design club
+5. selling seashells by the seashore
+6. upper-division CS courses
+7. unviersity of califonria iriven
+8. i love search engines
+9. last name, first name # comma messes up the token comparisons, added tf-idf scoring for similarities
+10. ca # returns somewhat random results
+
+Good Performance
+# These all returned relevant results despite misspellings or subjects irrelevant to ICS database
+1. bachelorofarts
+2. overwatch
+3. UCI
+4. raymond klefstad
+5. irving
+6. student
+7. esoteric
+8. vompurtet cescience
+9. jayaywfajsuwgvq
+10. wonderful! amazing?
