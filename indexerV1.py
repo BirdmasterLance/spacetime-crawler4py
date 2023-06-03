@@ -135,7 +135,7 @@ results = set()
 ps = PorterStemmer()
 
 # IMPORTANT -> Edit project_dir to the path of your project folder <- IMPORTANT
-project_dir = "C:\\Users\\huule\\Desktop\\School\\CS121"
+project_dir = "C:\\Users\\huule\\Documents\\GitHub\\spacetime-crawler4py"
 
 # IMPORTANT -> Edit json_dir to the path of your DEV (containing JSON) folder <- IMPORTANT
 json_dir = "C:\\Users\\huule\\Desktop\\School\\CS121\\DEV"
@@ -150,6 +150,9 @@ class InvertedIndexer:
         self.index_file = project_dir + "\\index"
         self.doc_index_file = project_dir + "\\docIndexFile.txt"
         self.merge_index_file = project_dir + "\\mergeIndexFile.txt"
+        self.index_of_index_file = project_dir + "\\mergeIndexIndexFile.txt"
+        self.tfidf_file = project_dir + "\\tfidfFile.txt"
+        self.tfidf_index_file = project_dir + "\\tdidfIndexFile.txt"
 
         self.blacklist = [
             '[document]',
@@ -206,22 +209,22 @@ class InvertedIndexer:
                     continue
 
 
-                # for section in soup.find_all(text=True):
-                #     if section.parent.name not in self.blacklist:
-                #         text = section.string
+                for section in soup.find_all(text=True):
+                    if section.parent.name not in self.blacklist:
+                        text = section.string
 
-                #         tokens = re.finditer(r'\b(\d+)|(([a-z]+)|([A-Z]))\b', text.lower())
-                #         for tokenMatch in tokens:
-                #             token = ps.stem(tokenMatch.group())
+                        tokens = re.finditer(r'\b(\d+)|(([a-z]+)|([A-Z]))\b', text.lower())
+                        for tokenMatch in tokens:
+                            token = ps.stem(tokenMatch.group())
 
-                #             if len(token) == 1:
-                #                 continue
+                            if len(token) == 1:
+                                continue
 
-                #             posting = Posting()
-                #             posting.setId(docId)
-                #             posting.setPosition(tokenMatch.start())
-                #             posting.setImportantScore(section.parent.name)
-                #             self.index[token].append(posting)
+                            posting = Posting()
+                            posting.setId(docId)
+                            posting.setPosition(tokenMatch.start())
+                            posting.setImportantScore(section.parent.name)
+                            self.index[token].append(posting)
 
                 with open(self.doc_index_file, 'a') as f:
                     f.write(str(docId) + ';' + filename + ';' + str(link[0]) + '\n')
@@ -232,15 +235,15 @@ class InvertedIndexer:
                 print('Execution time for', filename, ': ', str(endTime - startTime))
 
                 # Offload index to disk if the count reaches the limit
-        #         if len(self.index) >= 1000:
-        #             folder_path = pathlib.Path(
-        #                 project_dir + "\\partial_indexes")
-        #             self.savePartialIndex(folder_path)
-        #             self.index.clear()
-        #             self.partial_index_count += 1
-        # folder_path = pathlib.Path(
-        #                 project_dir + "\\partial_indexes")
-        # self.savePartialIndex(folder_path)
+                if len(self.index) >= 1000:
+                    folder_path = pathlib.Path(
+                        project_dir + "\\partial_indexes")
+                    self.savePartialIndex(folder_path)
+                    self.index.clear()
+                    self.partial_index_count += 1
+        folder_path = pathlib.Path(
+                        project_dir + "\\partial_indexes")
+        self.savePartialIndex(folder_path)
         print('ran out of files to index through')
         totalEndTime = time.time()
         print('Total execution time:', str(totalEndTime - totalStartTime))
@@ -315,15 +318,7 @@ class InvertedIndexer:
                                     merge_file.write(line)
 
         print('Merge indexes completed.')
-
-
-# noinspection PyMethodMayBeStatic
-class SearchEngine:
-    def __init__(self):
-        self.index_file = project_dir + "\\mergeIndexFile.txt"
-        self.index_of_index_file = project_dir + "\\mergeIndexIndexFile.txt"
-        self.doc_index_file = project_dir + "\\docIndexFile.txt"
-        self.index_limits = indexLimits
+    
 
     def getWordPostingFromFile(self, startingWord):
         output = dict()
@@ -343,9 +338,9 @@ class SearchEngine:
                     limit += 1
 
                     # Use this library to get the nearest similarity to the word
-                    if difflib.get_close_matches(startingWord, [indexWord], cutoff=0.95): 
+                    if (startingWord == indexWord): 
                         break
-            with open(self.index_file, 'r', encoding='utf-8') as f:
+            with open(self.merge_index_file, 'r', encoding='utf-8') as f:
                 f.seek(indexPosition)
                 line = f.readline()
                 indexSplit = line.strip().split(' ')
@@ -360,6 +355,7 @@ class SearchEngine:
                         posting.setId(int(postingParts[0]))
                         posting.setPosition(int(postingParts[1]))
                         posting.setImportantScore(postingParts[2])
+                        # print('posting {0} {1} {2}'.format(postingParts[0], postingParts[1], postingParts[2]))
                         postingList.append(posting)
 
         except FileNotFoundError:
@@ -404,10 +400,95 @@ class SearchEngine:
             # the number of docs it appears in
         
         for word, docFreq in output.items():
+            if(docFreq == 0): continue
             inverseFreq = math.log(docCount/docFreq) # using the document frequency from before, taking log of all docs / this term's doc freq
             output[word] = inverseFreq # replace the document frequency value with the inverse doc frequency
         
         return output
+
+    def getTFIDFRankings(self, TFDict, IDFDict):
+        output = dict() # will hold the final tf-idf value associated with the term
+    
+        tfIdf = 0 # will eventually hold the tf-idf value
+        for term, Tfrequency in TFDict.items(): # looks for the term frequency first
+            docTfIdfList = list() # a list that will hold all tf-idf values and their associated doc IDs
+            for indivDoc in Tfrequency: # looping through the list of frequencies in each doc for each term
+                tfIdf = indivDoc[1] * IDFDict[term] # multiplying the term frequency by general IDF
+                docTfIdfList.append((indivDoc[0], tfIdf)) # appending a tuple holding the docID and tfIdf
+        
+        output[term] = docTfIdfList # stores the final tf-idf values and their docIDs in the dictionary being returned
+    
+    def saveTFIDFToFile(self):
+        with open(self.tfidf_file, 'w', encoding='utf-8') as tfidf_file, open(self.tfidf_index_file, 'w', encoding='utf-8') as tfidfIndex_file, open(self.index_of_index_file, 'r', encoding='utf-8') as index_index_file:
+            docPos = 0
+            for line in index_index_file:
+                wordAndPost = line.split(':')
+                output = wordAndPost[0] + ' '
+                postingDict = self.getWordPostingFromFile(wordAndPost[0])
+                termFrequency = self.getTermFrequencyFromPosting(postingDict)
+                documentFrequency = self.getInverseDocFrequencyFromPosting(postingDict)
+                docCount = 0
+
+                for TFIDFList in self.getTFIDFRankings(termFrequency, documentFrequency).values():
+                    TFIDFList.sort(key=lambda x:x[1], reverse=True)
+                    for tup in TFIDFList:
+                        output += '{0},{1}|'.format(str(tup[0]),str(tup[1]))
+                        docCount += 1
+                output = output[:-1] + '\n'
+                tfidf_file.write(output)
+
+                output2 = wordAndPost[0] + ':' + str(docPos) + '\n'
+                docPos += len(output)
+                tfidfIndex_file.write(output2)
+
+
+# noinspection PyMethodMayBeStatic
+class SearchEngine:
+    def __init__(self):
+        self.index_file = project_dir + "\\mergeIndexFile.txt"
+        self.index_of_index_file = project_dir + "\\mergeIndexIndexFile.txt"
+        self.doc_index_file = project_dir + "\\docIndexFile.txt"
+        self.tfidf_file = project_dir + "\\tfidfFile.txt"
+        self.tfidf_index_file = project_dir + "\\tdidfIndexFile.txt"
+        self.index_limits = indexLimits
+    
+    def getTFIDFFromFile(self, startingWord, numResults):
+        startingTime = time.time()
+        output = dict()
+        resultsFound = 0
+        with open(self.tfidf_file, 'r', encoding='utf-8') as tfidf_file, open(self.tfidf_index_file, 'r', encoding='utf-8') as tfidfIndex_file:
+            limit = 0
+            lookAtIndexStartTime = time.time()
+            for line in tfidfIndex_file:
+                wordAndPos = line.split(':')
+                indexPosition = int(wordAndPos[1])  # Get the position of where the word starts in the index file
+                # Temporary fix because index of index is wrong
+                indexPosition += limit
+                limit += 1
+
+                # Use this library to get the nearest similarity to the word
+                if difflib.get_close_matches(startingWord, [wordAndPos[0]], cutoff=0.95): 
+                    lookAtIndexEndTime = time.time()
+                    print("time to look through before match {0} ms".format((lookAtIndexEndTime-lookAtIndexStartTime)*1000))
+                    matchStartTime = time.time()
+                    tfidf_file.seek(indexPosition)
+                    tfidf_line = tfidf_file.readline()
+                    tfidf_list = list()
+                    tfidf_scores = tfidf_line.split(' ')
+                    for tfidf in tfidf_scores[1].split('|'):
+                        if(resultsFound >= numResults): break
+                        docAndtfidf = tfidf.split(',')
+                        tfidf_list.append((int(docAndtfidf[0]),float(docAndtfidf[1])))
+                        resultsFound += 1
+                    tfidf_list.sort(key=lambda x:x[1], reverse=True) # Sort tfidf_list in descending order (best scores on top)
+                    output[tfidf_scores[0]] = tfidf_list
+                    matchEndTime = time.time()
+                    print("time to get matches {0} ms".format((matchEndTime-matchStartTime)*1000))
+                    break
+        endTime = time.time()
+        print("time to complete gettfidf: {0} ms".format((endTime-startingTime) * 1000))
+        return output
+
 
     def intersect(self, list1, list2):
         output = list()
@@ -482,9 +563,13 @@ class SearchEngine:
         test = list()
         for word in query.split(' '):
             word = ps.stem(word)
-            postingDict = self.getWordPostingFromFile(word)
-            postingTermFreq = self.getTermFrequencyFromPosting(postingDict)
-            postingDocFreq = self.getInverseDocFrequencyFromPosting(postingDict)
+            tfidfDict = self.getTFIDFFromFile(word, 1000)
+            #for term, tfidfList in tfidfDict.items():
+            #    for tfidf in tfidfList:
+            #        print('{0} {1}'.format(tfidf[0], tfidf[1]))
+            # postingDict = self.getWordPostingFromFile(word)
+            # postingTermFreq = self.getTermFrequencyFromPosting(postingDict)
+            # postingDocFreq = self.getInverseDocFrequencyFromPosting(postingDict)
             
             # Delete later this is just how i see what values are in term and inverse doc frequency
             # for postingList in postingTermFreq.values():
@@ -494,27 +579,27 @@ class SearchEngine:
             #     print('term: {0} InverseDocFreq: {1}'.format(term, freq))
             
             
-            test2 = list()
-            for freqList in postingTermFreq.values():
-                test2 += freqList
-            test.append(test2)
-        if len(test) == 1:
-            result_urls = self.returnURLs(test[0], 5)
-        else:
-            count = 1
-            compare = list()
-            while count < len(test):
-                if count > 1:
-                    compare = self.intersect(compare, test[count])
-                else:
-                    compare = self.intersect(test[0], test[1])
-                count += 1
-            compare_urls = self.returnURLs(compare, 5)
-            if len(compare_urls) < 5:
-                remaining_urls = self.returnURLs(test[0], 5 - len(compare_urls))
-                result_urls = compare_urls.union(remaining_urls)
-            else:
-                result_urls = compare_urls
+        #     test2 = list()
+        #     for freqList in postingTermFreq.values():
+        #         test2 += freqList
+        #     test.append(test2)
+        # if len(test) == 1:
+        #     result_urls = self.returnURLs(test[0], 5)
+        # else:
+        #     count = 1
+        #     compare = list()
+        #     while count < len(test):
+        #         if count > 1:
+        #             compare = self.intersect(compare, test[count])
+        #         else:
+        #             compare = self.intersect(test[0], test[1])
+        #         count += 1
+        #     compare_urls = self.returnURLs(compare, 5)
+        #     if len(compare_urls) < 5:
+        #         remaining_urls = self.returnURLs(test[0], 5 - len(compare_urls))
+        #         result_urls = compare_urls.union(remaining_urls)
+        #     else:
+        #         result_urls = compare_urls
 
         # results = []
         # for url in result_urls:
@@ -523,7 +608,7 @@ class SearchEngine:
 
         endTime = time.time()
         print("Query Time:", str((endTime - startTime) * 1000), 'ms')
-        return result_urls, str((endTime - startTime))
+        # return result_urls, str((endTime - startTime))
 
 
 # README:
@@ -535,6 +620,19 @@ class SearchEngine:
 if __name__ == '__main__':
     # Comment out below after index creation
     # index = InvertedIndexer()
+    
+    # postingDict = index.getWordPostingFromFile("scienc")
+    # postingTermFreq = index.getTermFrequencyFromPosting(postingDict)
+    # postingDocFreq = index.getInverseDocFrequencyFromPosting(postingDict)
+    
+    # Delete later this is just how i see what values are in term and inverse doc frequency
+    # for postingList in postingTermFreq.values():
+    #     for posting in postingList:
+    #         print('docID: {0} termFreq: {1}'.format(posting[0], posting[1]))
+    # for term, freq in postingDocFreq.items():
+    #     print('term: {0} InverseDocFreq: {1}'.format(term, freq))
+    
+    # index.saveTFIDFToFile()
     # index.indexDocuments(0)
     # index.mergeIndexes()
     # Comment out above after index creation
