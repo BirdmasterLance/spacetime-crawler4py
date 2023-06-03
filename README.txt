@@ -32,7 +32,7 @@ Student ID #: 12857412
 UCI Email: jyqin1@uci.edu
 
 Jennifer Duran
-Student ID #: 10585267
+Student ID #: 10485267
 UCI Email: jduran5@uci.edu
 
 Cassidy Mangune
