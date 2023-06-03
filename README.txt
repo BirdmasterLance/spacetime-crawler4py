@@ -5,14 +5,15 @@ This project implements a search engine using an indexer and a search component.
 ## Executing program
 
 ### Create the index
+PRELIMINARY: OPEN indexerV1.py
 
-1) Ensure that you have corrected project_dir to the path of your project folder on line 133
-2) Ensure that you have corrected json_dir to the path of your DEV (containing JSON) folder on line 136 
+1) Ensure that you have corrected project_dir to the path of your project folder on line 138
+2) Ensure that you have corrected json_dir to the path of your DEV (containing JSON) folder on line 141
 3) The program will run on the DEV (or otherwise selected) folder, and will create an inverted index
 
 ### Start the search interface
 
-1) Comment out lines 472-475 after the index creation
+1) Comment out lines 562-567 after the index creation
 2) The program will then launch an interface to search queries
 
 ### Perform a simple query
