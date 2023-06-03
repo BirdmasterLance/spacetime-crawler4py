@@ -568,11 +568,6 @@ class SearchEngine:
 if __name__ == '__main__':
     # Comment out below after index creation
     # index = InvertedIndexer()
-
-    # postingDict = index.getWordPostingFromFile("scienc")
-    # postingTermFreq = index.getTermFrequencyFromPosting(postingDict)
-    # postingDocFreq = index.getInverseDocFrequencyFromPosting(postingDict)
-
     # index.saveTFIDFToFile()
     # index.indexDocuments(0)
     # index.mergeIndexes()
